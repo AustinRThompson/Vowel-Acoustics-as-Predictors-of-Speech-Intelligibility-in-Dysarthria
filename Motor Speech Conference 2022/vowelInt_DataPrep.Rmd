@@ -1,0 +1,2593 @@
+---
+title: "Vowel Intelligibility: Data Prep"
+output: html_notebook
+---
+
+# Packages
+```{r}
+library(tidyverse) # install.packages('tidyverse')
+library(xfun) # install.packages('xfun')
+library(remotes) # install.packages('remotes')
+library(autoscore) # xfun::install_github("TysonStanley/autoscore")
+library(readxl)
+library(SnowballC) # install.packages('SnowballC') # this is needed for autoscore
+library(corrr)
+library(ggpubr)
+library(openxlsx)
+library(rio)
+library(geometry)
+source("Functions/MSL Tools.R")
+library(ks)
+library(reshape2)
+library(ggforce)
+library(RColorBrewer)
+```
+
+# Naive Listener Data
+This section of code uploads, preps, and scores the transcriptions provided by naive listeners.
+
+## Prepping Transcription Data
+```{r}
+# Prolific Batch #1 ----
+## Loading the file
+naiveData1 <- utils::read.csv(paste("Data/Listener Data/Prolific 1/",list.files("Data/Listener Data/Prolific 1/", pattern = "Naive")[1], sep = ""),header = FALSE, stringsAsFactors = FALSE, strip.white=TRUE)
+  naiveData1[3,] <- NA
+  naiveData1[2,1:38] <- NA
+
+## Cleaning the headers
+headings <- as.data.frame(lapply(naiveData1[1:3,], paste,collapse="_")) %>%
+    str_remove_all("_NA") %>%
+    str_remove_all("_4") %>%
+    str_remove_all(" ") %>%
+    t() %>%
+    as.data.frame
+    colnames(naiveData1) <- headings
+    naiveData1 <- naiveData1[-c(1:3),]
+
+## Filtering out incomplete/exluded data
+naiveData1 <- naiveData1 %>%
+  dplyr::filter(Finished == "True") %>%
+  dplyr::filter(AudioCheck == "Yes, I can hear the audio.") %>%
+  dplyr::filter(!grepl("I currently have a speech, language, and/or hearing diso",Q2.4)) %>%
+  dplyr::filter(!grepl("I am a speech language pathologist",Q2.4)) %>%
+  dplyr::mutate(ID = paste("N",row_number(),sep = "")) # Creates listener IDs
+  
+# Prolific Batch #2 ----
+## Loading the file
+naiveData2 <- utils::read.csv(paste("Data/Listener Data/Prolific 2/",list.files("Data/Listener Data/Prolific 2/", pattern = "Naive")[1], sep = ""),header = FALSE, stringsAsFactors = FALSE, strip.white=TRUE)
+  naiveData2[3,] <- NA
+  naiveData2[2,1:38] <- NA
+
+## Cleaning the headers
+headings <- as.data.frame(lapply(naiveData2[1:3,], paste,collapse="_")) %>%
+    str_remove_all("_NA") %>%
+    str_remove_all("_4") %>%
+    str_remove_all(" ") %>%
+    t() %>%
+    as.data.frame
+    colnames(naiveData2) <- headings
+    naiveData2 <- naiveData2[-c(1:3),]
+    
+## Filtering out incomplete/exluded data
+naiveData2 <- naiveData2 %>%
+  dplyr::filter(Finished == "True") %>%
+  dplyr::filter(AudioCheck == "Yes, I can hear the audio.") %>%
+  dplyr::filter(!grepl("I currently have a speech, language, and/or hearing diso",Q2.4)) %>%
+  dplyr::filter(!grepl("I am a speech language pathologist",Q2.4)) %>%
+  dplyr::mutate(ID = paste("N",row_number()+nrow(naiveData1),sep = "")) # Creates listener IDs
+    
+# Combining the two prolific batches
+## Listener Demographics ----
+listenerDemo1 <- naiveData1 %>%
+  dplyr::select(ID, StartDate:EP3)
+
+listenerDemo2 <- naiveData2 %>%
+  dplyr::select(ID, StartDate:EP3)
+
+listenerDemo <- rbind(listenerDemo1,listenerDemo2) %>%
+    dplyr::rename(proloficID = Q1.1,
+                inUS = Q2.1,
+                english = Q2.2,
+                famSLHDs = Q2.3,
+                age = Q3.1,
+                gender = Q3.2,
+                race = Q3.3,
+                ethnicity = Q3.4) %>%
+  dplyr::select(!c(RecipientLastName:ExternalReference))
+
+## Intelligibility Ratings -----
+responses1 <- naiveData1 %>%
+  dplyr::select(ID, AM5_1.1:HDF5_2.VAS) %>%
+  tidyr::pivot_longer(cols = AM5_1.1:HDF5_2.VAS,
+                      names_to = "File",
+                      values_to = "Response") %>%
+  dplyr::filter(!Response == "")
+
+responses2 <- naiveData2 %>%
+  dplyr::select(ID, AM4_1.1:ALSF8_2.VAS) %>%
+  tidyr::pivot_longer(cols = AM4_1.1:ALSF8_2.VAS,
+                      names_to = "File",
+                      values_to = "Response") %>%
+  dplyr::filter(!Response == "")
+
+perceptualRatings <- rbind(responses1, responses2) %>%
+  dplyr::rename(ListenerID = ID) %>%
+  dplyr::mutate(SpeakerID = sub("_.*", "",File),
+                SpeakerID = factor(SpeakerID),
+                ListenerID = factor(ListenerID))
+
+VASratings <- perceptualRatings %>%
+  dplyr::filter(grepl(".vas",File,ignore.case = T)) %>%
+  dplyr::mutate(Response = as.numeric(Response))
+
+perceptualRatings %>%
+  dplyr::filter(!grepl(".vas",File,ignore.case = T)) %>%
+  group_by(SpeakerID) %>%
+  dplyr::summarise(N_Raters = length(unique(ListenerID)))
+  
+
+# Removes unwanted variables
+rm(headings, naiveData1, naiveData2, responses1, responses2, listenerDemo1, listenerDemo2)
+
+```
+
+## Autoscoring the transcriptions
+```{r}
+PhraseIDs <- readxl::read_xlsx("Data/Autoscore/PhraseID Key.xlsx") %>%
+  dplyr::mutate(PhraseID = case_when(
+                  PhraseID == "1.1" ~ "1.01",
+                  PhraseID == "1.2" ~ "1.02",
+                  PhraseID == "1.3" ~ "1.03",
+                  PhraseID == "1.4" ~ "1.04",
+                  PhraseID == "1.5" ~ "1.05",
+                  PhraseID == "1.6" ~ "1.06",
+                  PhraseID == "1.7" ~ "1.07",
+                  PhraseID == "1.8" ~ "1.08",
+                  PhraseID == "1.9" ~ "1.09",
+                  TRUE ~ PhraseID
+                ))
+Incidentals <- readxl::read_xlsx("Data/Autoscore/Incidentals.xlsx") %>%
+  dplyr::mutate(PhraseID = substr(PhraseID, 1, 4),
+                PhraseID = case_when(
+                  PhraseID == "1.1" ~ "1.01",
+                  PhraseID == "1.2" ~ "1.02",
+                  PhraseID == "1.3" ~ "1.03",
+                  PhraseID == "1.4" ~ "1.04",
+                  PhraseID == "1.5" ~ "1.05",
+                  PhraseID == "1.6" ~ "1.06",
+                  PhraseID == "1.7" ~ "1.07",
+                  PhraseID == "1.8" ~ "1.08",
+                  PhraseID == "1.9" ~ "1.09",
+                  TRUE ~ PhraseID
+                ),
+                PhraseID = as.factor(PhraseID))
+acceptable_spellings <- readxl::read_xlsx("Data/Autoscore/acceptableSpellings.xlsx")
+
+transcriptions <- perceptualRatings %>%
+  dplyr::filter(!grepl(".vas",File,ignore.case = T)) %>%
+  dplyr::mutate(PhraseID = sub(".*_", "",File),
+                PhraseID = case_when(
+                  PhraseID == "1.1" ~ "1.01",
+                  PhraseID == "1.2" ~ "1.02",
+                  PhraseID == "1.3" ~ "1.03",
+                  PhraseID == "1.4" ~ "1.04",
+                  PhraseID == "1.5" ~ "1.05",
+                  PhraseID == "1.6" ~ "1.06",
+                  PhraseID == "1.7" ~ "1.07",
+                  PhraseID == "1.8" ~ "1.08",
+                  PhraseID == "1.9" ~ "1.09",
+                  TRUE ~ PhraseID
+                ),
+                PhraseID = as.factor(PhraseID)) %>%
+    dplyr::select(!File) %>%
+    base::merge(.,PhraseIDs) %>%
+  left_join(., Incidentals, by=c("PhraseID","SpeakerID")) %>%
+  dplyr::mutate(Target = ifelse(is.na(Incidental), Target, Incidental),
+                TargetNumber = ifelse(is.na(TargetNumber.y), TargetNumber.x, TargetNumber.y)) %>%
+  dplyr::select(ListenerID, SpeakerID, PhraseID,Target, Response, TargetNumber)
+
+
+cleanTranscriptions <- transcriptions %>%
+  dplyr::select(ListenerID,Target,Response) %>%
+  dplyr::rename(id = ListenerID,
+                target = Target,
+                response = Response)
+
+autoscoreOutput <- autoscore::autoscore(cleanTranscriptions,
+                                             acceptable_df = acceptable_spellings,
+                                             plural_rule = TRUE,
+                                             plural_add_rule = TRUE,
+                                             tense_rule = TRUE,
+                                             tense_add_rule = TRUE,
+                                             a_the_rule = TRUE,
+                                             root_word_rule = TRUE,
+                                             double_letter_rule = TRUE,
+                                             suffix_rule = TRUE)
+autoscoreOutput <- autoscoreOutput %>%
+  dplyr::rename(Autoscore = autoscore) %>% # This line prepares the autoscored data to be merged with 'transcriptions'
+  dplyr::select(Autoscore)
+# The below pipe creates the 'scoredTranscriptions', and reorders the columns
+ scoredTranscriptions <-  base::merge(autoscoreOutput, transcriptions, by='row.names') %>%
+   relocate(Autoscore, .after = TargetNumber) %>%
+   relocate(PhraseID, .after = SpeakerID) %>%
+   dplyr::select(!c(Row.names))
+
+# Removes unwanted variables
+rm(PhraseIDs,acceptable_spellings,transcriptions,cleanTranscriptions,autoscoreOutput)
+```
+
+## Transcription Accuracy
+```{r}
+transAcc <- scoredTranscriptions %>%
+  group_by(SpeakerID, ListenerID) %>%
+  summarise(sumTarget = sum(TargetNumber),
+            sumTranscription = sum(Autoscore),
+            .groups = "rowwise") %>%
+  dplyr::mutate(transAcc = (sumTranscription/sumTarget)*100) %>%
+  dplyr::select(!c(sumTarget,sumTranscription))
+
+Listener_transAcc <- transAcc %>%
+  dplyr::group_by(ListenerID) %>%
+  dplyr::summarise(transAcc = mean(transAcc, na.rm = T))
+
+Speaker_transAcc<- transAcc %>%
+  dplyr::group_by(SpeakerID) %>%
+  dplyr::summarise(transAcc = mean(transAcc, na.rm = T))
+```
+
+## VAS 
+```{r}
+VAS <- VASratings %>%
+  dplyr::rename(VAS = Response) %>%
+  relocate(SpeakerID, .before = "ListenerID") %>%
+  dplyr::select(!File)
+
+Listener_VAS <- VAS %>%
+  dplyr::select(ListenerID, VAS) %>%
+  dplyr::mutate(VAS = as.numeric(VAS)) %>%
+  dplyr::group_by(ListenerID) %>%
+  dplyr::summarise(VAS = mean(VAS, na.rm = T))
+
+Speaker_VAS <- VAS %>%
+  dplyr::select(SpeakerID, VAS) %>%
+  dplyr::mutate(VAS = as.numeric(VAS)) %>%
+  dplyr::group_by(SpeakerID) %>%
+  dplyr::summarise(VAS = mean(VAS, na.rm = T))
+```
+
+## Preparing Naive Listener Files for Export
+This section preps the NaiveListener_Demographics dataframe, as well a the NaiveListener_correlation dataframe. It also begins the intRatings_bySpeaker dataframe, which will be used for Question #1.
+
+## Exporting Files
+
+```{r}
+# NaiveListener_Demographics ----
+rio::export(listenerDemo, file = "Data/Prepped Data/Listener_Demographics.csv")
+
+# Removeing unwanted variables
+rm(Incidentals,listenerDemo,perceptualRatings,scoredTranscriptions,transAcc,VAS,VASratings)
+```
+
+
+# Acoustic Data Prep
+
+## Generating .lbl files for TF 32
+
+```{r}
+speakers <- readxl::read_xlsx(path = "Data/MSC_SpeakerList.xlsx",
+                              sheet = "Completed") %>%
+  dplyr::filter(!is.na(`Date Segmented`))
+
+k <- 1
+
+while (k <= nrow(speakers)) {
+speaker <- speakers$Speaker[k]
+
+filePath <- paste("Data/Speaker Data/",speaker, sep = "")
+
+segments <- list.files(path = filePath,
+             all.files = T,
+             ignore.case = T,
+             pattern = "segment") %>%
+  paste(filePath,"/",., sep = "") %>%
+  read.delim(., header = TRUE)
+
+lbl <- segments %>%
+  dplyr::select(tmin, tmax, text) %>%
+  dplyr::mutate(tmin = tmin*1000,
+                tmax = tmax*1000,
+                tmin = round(tmin, digits = 3),
+                tmax = round(tmax, digits = 3))
+
+outputFile <- list.files(path = filePath,
+                         all.files = T,
+                         ignore.case = T,
+                         pattern = "segment") %>%
+  paste(filePath,"/",., sep = "") %>%
+  str_remove(., "\\.[^.]*$") %>%
+  str_remove(., ".Segments") %>%
+  str_remove(., "_segments") %>%
+  paste(.,".lbl", sep = "")
+
+write_delim(lbl,
+            file = outputFile,
+            col_names = FALSE)
+
+rm(speaker, filePath, segments, lbl, outputFile)
+
+k <- k + 1
+}
+
+```
+
+## Acoustic Measures
+
+```{r}
+# If true, the script will generate and save plots
+savePlots <- TRUE
+
+Speakers <- rio::import("Data/MSC_SpeakerList.xlsx") %>%
+  dplyr::filter(Smoothed == 1) %>%
+  dplyr::select(c(Speaker, Sex))
+
+RefData <- read.xlsx("Data/Speaker Data/Reference Data/Hillenbrand Vowel Data.xlsx",
+                     sheet = "Hillenbrand Vowel Data") %>%
+  dplyr::rename(Speaker = 1,
+                F1_Hz = 4,
+                F2_Hz = 5) %>%
+  dplyr::select(Speaker, F1_Hz, F2_Hz) %>%
+  dplyr::filter(!grepl("b|g",Speaker)) %>%
+  dplyr::mutate(Sex = ifelse(grepl("m",Speaker),"M","F"),
+                Vowel = case_when(
+                  grepl(pattern = "uw", Speaker) ~ "u",
+                  grepl(pattern = "ah", Speaker) ~ "a",
+                  grepl(pattern = "iy", Speaker) ~ "i",
+                  grepl(pattern = "uh", Speaker) ~ "v",
+                  grepl(pattern = "ae", Speaker) ~ "ae"
+                )) %>%
+  dplyr::filter(!is.na(Vowel)) %>%
+  dplyr::select(!Speaker) %>%
+  dplyr::group_by(Sex, Vowel) %>%
+  dplyr::summarise(F1_Ref = mean(F1_Hz),
+                   F2_Ref = mean(F2_Hz))
+
+NC <- 1
+
+Aco_Measures <- Speakers %>%
+  dplyr::mutate(Etiology = case_when(
+    grepl(pattern = "PD", Speaker) ~ "PD",
+    grepl(pattern = "ALS", Speaker) ~ "ALS",
+    grepl(pattern = "HD", Speaker) ~ "HD",
+    TRUE ~ "Ataxic"
+  )) %>%
+  dplyr::mutate(VSA = NA,
+                vowel_ED = NA,
+                Hull = NA,
+                Hull_VSD_25 = NA,
+                Hull_VSD_50 = NA,
+                Hull_VSD_75 = NA,
+                Row = row_number()) %>%
+  dplyr::relocate(Row, .before = Speaker)
+
+while (NC <= NROW(Speakers)) {
+  
+  Speaker <- Speakers %>%
+    dplyr::select(Speaker) %>%
+    dplyr::filter(row.names(.) == NC) %>%
+    paste()
+  
+  Formants_TF32 <- list.files(path = paste("Data/Speaker Data/", Speaker, sep = ""), 
+                              pattern = ".FBW") %>%
+    paste("Data/Speaker Data/", Speaker, "/", ., sep = "") %>%
+    read.delim(., header = F) %>%
+    dplyr::select(!c(V5, V6, V7)) %>%
+    dplyr::rename(Time_ms = V1,
+                  F1_kHz = V2,
+                  F2_kHz = V3,
+                  F3_kHz = V4) %>%
+    dplyr::mutate(F1_kHz = ifelse(F1_kHz == 0, NA, F1_kHz),
+                  F2_kHz = ifelse(F2_kHz == 0, NA, F2_kHz),
+                  F3_kHz = ifelse(F3_kHz == 0, NA, F3_kHz)) %>%
+    dplyr::mutate(F1_Hz = F1_kHz * 1000,
+                  F2_Hz = F2_kHz * 1000,
+                  F3_Hz = F3_kHz * 1000,
+                  F1_z = scale(F1_Hz, center = TRUE),
+                  F2_z = scale(F2_Hz, center = TRUE),
+                  F3_z = scale(F3_Hz, center = TRUE),
+                  F1_b = emuR::bark(F1_Hz),
+                  F2_b = emuR::bark(F2_Hz),
+                  F3_b = emuR::bark(F3_Hz))
+  
+  Pitch_PRAAT <- list.files(path = paste("Data/Speaker Data/", Speaker, sep = ""), 
+                              pattern = ".Pitch", ignore.case = T) %>%
+    paste("Data/Speaker Data/", Speaker, "/", ., sep = "") %>%
+    read.delim(., header = F) %>%
+    dplyr::rename(Pitch = V1) %>%
+    dplyr::mutate(Pitch = gsub("--undefined--",NA,Pitch),
+                  Pitch = as.numeric(Pitch))
+  
+  Formants_PRAAT <- list.files(path = paste("Data/Speaker Data/", Speaker, sep = ""), 
+                              pattern = "_Formant", ignore.case = T) %>%
+    paste("Data/Speaker Data/", Speaker, "/", ., sep = "") %>%
+    read.delim(., header = T) %>%
+    dplyr::select(!c(nformants, B1.Hz., B2.Hz., B3.Hz., F4.Hz., B4.Hz., F5.Hz., B5.Hz.)) %>%
+    dplyr::rename(Time_s = time.s.,
+                  F1_Hz = F1.Hz.,
+                  F2_Hz = F2.Hz.,
+                  F3_Hz = F3.Hz.) %>%
+    dplyr::mutate(F1_Hz = ifelse(F1_Hz == 0, NA, F1_Hz),
+                  F2_Hz = ifelse(F2_Hz == 0, NA, F2_Hz),
+                  F3_Hz = ifelse(F3_Hz == 0, NA, F3_Hz)) %>%
+    dplyr::mutate(F1_Hz = as.numeric(F1_Hz),
+                  F2_Hz = as.numeric(F2_Hz),
+                  F3_Hz = suppressWarnings(as.numeric(F3_Hz)),
+                  Time_ms = Time_s / 1000,
+                  F1_kHz = F1_Hz / 1000,
+                  F2_kHz = F2_Hz / 1000,
+                  F3_kHz = F3_Hz / 1000) %>%
+    dplyr::select(!Time_s) %>%
+    dplyr::relocate(Time_ms, .before = F1_Hz) %>%
+    cbind(.,Pitch_PRAAT)
+  
+  c <- 2
+  while(c < NROW(Formants_PRAAT)){
+    Formants_PRAAT$F1_Hz[c] <- ifelse(is.na(Formants_PRAAT$F1_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F1_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F1_Hz[c])
+    Formants_PRAAT$F2_Hz[c] <- ifelse(is.na(Formants_PRAAT$F2_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F2_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F2_Hz[c])
+    c <- c + 1
+  }
+  rm(c)
+  
+  Formants_PRAAT <- Formants_PRAAT %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+    dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T))) %>%
+    #dplyr::mutate(mDistOutlier = (stats::pchisq(mDist, df=1, lower.tail=FALSE)) < .001) %>%
+    dplyr::filter(mDist_sd < 2) %>%
+    dplyr::select(!c(F1_mad, F2_mad, mDist, mDist_sd)) %>%
+    dplyr::mutate(F1_z = scale(F1_Hz, center = TRUE),
+                  F2_z = scale(F2_Hz, center = TRUE),
+                  F3_z = scale(F3_Hz, center = TRUE),
+                  F1_b = emuR::bark(F1_Hz),
+                  F2_b = emuR::bark(F2_Hz),
+                  F3_b = emuR::bark(F3_Hz))
+  
+  rm(Pitch_PRAAT)
+  
+  Segments_PRAAT <- list.files(path = paste("Data/Speaker Data/", Speaker, sep = ""), 
+                              pattern = "_Segments", ignore.case = T) %>%
+    paste("Data/Speaker Data/", Speaker, "/", ., sep = "") %>%
+    read.delim(., header = T) %>%
+    dplyr::select(!tier) %>%
+    dplyr::rename(Onset_s = tmin,
+                  Offset_s = tmax,
+                  Token = text) %>%
+    dplyr::mutate(Onset_ms = Onset_s * 1000,
+                  Offset_ms = Offset_s * 1000,
+                  Token = tolower(Token),
+                  Token = gsub(" ","",Token),
+                  Vowel = Token,
+                  Vowel = gsub("r|l|w|j|[*]", "", Vowel)) %>%
+    dplyr::select(!c(Onset_s, Offset_s)) %>%
+    dplyr::filter(Token != "")
+  
+  k <- 1
+  
+  vowelData <- Segments_PRAAT %>%
+    dplyr::mutate(Row = row_number(),
+                  Speaker = Speaker,
+                  Sex = Speakers$Sex[NC],
+                  F1_tempMid = NA,
+                  F2_tempMid = NA,
+                  F1_z_tempMid = NA,
+                  F2_z_tempMid = NA,
+                  F1_b_tempMid = NA,
+                  F2_b_tempMid = NA,
+                  TokenID = make.unique(Token),
+                  VowelID = make.unique(Vowel)) %>%
+    dplyr::relocate(c(Row,Speaker,Sex), .before = Token)
+  
+    acousticSegments <- openxlsx::createWorkbook()
+  
+  while (k <= NROW(vowelData)) {
+    
+    vowel <- vowelData %>%
+      dplyr::select(Vowel) %>%
+      dplyr::filter(row.names(.) == k) %>%
+      paste()
+    
+    Onset <- vowelData %>%
+      dplyr::select(Onset_ms) %>%
+      dplyr::filter(row.names(.) == k) %>%
+      paste() %>%
+      as.numeric()
+     
+    Offset <- vowelData %>%
+      dplyr::select(Offset_ms) %>%
+      dplyr::filter(row.names(.) == k) %>%
+      paste() %>%
+      as.numeric()
+    
+    Formants_Segment <- Formants_TF32 %>%
+      dplyr::filter(Time_ms > Onset) %>%
+      dplyr::filter(Time_ms < Offset)
+    
+    vowelData <- vowelData %>%
+      filter(Row == k) %>%
+      dplyr::mutate(duration_ms = Offset - Onset,
+                    midValue_ms = duration_ms/2 + Onset) %>%
+      bind_rows(., vowelData %>%
+                  filter(Row != k)) %>%
+      arrange(Row)
+    
+    tempMid <- Formants_Segment %>%
+      dplyr::mutate(tempMid = abs(Time_ms - vowelData$midValue_ms[k])) %>%
+      dplyr::filter(tempMid == base::min(tempMid, na.rm =T)) %>%
+      dplyr::select(Time_ms) %>%
+      as.numeric(paste())
+    
+    vowelData <- vowelData %>%
+      filter(Row == k) %>%
+      dplyr::mutate(F1_tempMid = Formants_Segment$F1_Hz[Formants_Segment$Time_ms==tempMid],
+                    F2_tempMid = Formants_Segment$F2_Hz[Formants_Segment$Time_ms==tempMid],
+                    F1_z_tempMid = Formants_Segment$F1_z[Formants_Segment$Time_ms==tempMid],
+                    F2_z_tempMid = Formants_Segment$F2_z[Formants_Segment$Time_ms==tempMid],
+                    F1_b_tempMid = Formants_Segment$F1_b[Formants_Segment$Time_ms==tempMid],
+                    F2_b_tempMid = Formants_Segment$F2_b[Formants_Segment$Time_ms==tempMid]
+                    ) %>%
+      bind_rows(., vowelData %>%
+                  filter(Row != k)) %>%
+      arrange(Row)
+    
+    # Finding Steady State for Semivowels + Vowels
+    if(grepl("w|l|r|j", vowelData$Token[k])){
+      F2_Anlaysis <- formantAnalysis(Formants_Segment$Time_ms, Formants_Segment$F2_Hz)
+      
+      Formants_Segment <- Formants_Segment %>%
+        dplyr::mutate(F2_Steady = F2_Anlaysis$f_steady) %>%
+        dplyr::filter(F2_Hz != 0)
+      
+      rm(F2_Anlaysis)
+      
+      Steady_Segments <- Formants_Segment %>%
+        dplyr::filter(F2_Steady == TRUE) %>%
+        dplyr::mutate(Row = row_number())
+        
+        if (all(Formants_Segment$F2_Steady == TRUE, na.rm = T) || all(Formants_Segment$F2_Steady == FALSE, na.rm = T)){
+          
+              vowelData <- vowelData %>%
+                filter(Row == k) %>%
+                dplyr::mutate(Onset_ms = vowelData$Onset_ms[k],
+                              Offset_ms = vowelData$Offset_ms[k],
+                              duration_ms = vowelData$duration_ms[k],
+                              midValue_ms = vowelData$midValue_ms[k],
+                              F1_tempMid = vowelData$F1_tempMid[k],
+                              F2_tempMid = vowelData$F2_tempMid[k],
+                              F1_z_tempMid = vowelData$F1_z_tempMid[k],
+                              F2_z_tempMid = vowelData$F2_z_tempMid[k],
+                              F1_b_tempMid = vowelData$F1_b_tempMid[k],
+                              F2_b_tempMid = vowelData$F2_b_tempMid[k]) %>%
+                bind_rows(., vowelData %>%
+                            filter(Row != k)) %>%
+                arrange(Row)
+              
+        } else {
+          SteadyIntervals <- rle(Formants_Segment$F2_Steady)$lengths[rle(Formants_Segment$F2_Steady)$values] %>%
+          as.data.frame() %>%
+          dplyr::rename(Count = 1) %>%
+            dplyr::filter(!is.na(Count)) %>%
+          dplyr::mutate(Row = row_number(),
+                        SteadyID = paste("Steady_",Row, sep = ""),
+                        Onset = NA,
+                        Offset = NA)
+      minik <- 1
+      while(minik <= NROW(SteadyIntervals)) {
+        if (minik == 1) {
+            SteadyIntervals$Onset[1] <- 1
+            SteadyIntervals$Offset[1] <- SteadyIntervals$Onset[1] + SteadyIntervals$Count[1] - 1
+        } else {
+          SteadyIntervals$Onset[minik] <- SteadyIntervals$Offset[minik - 1] + 1
+          SteadyIntervals$Offset[minik] <- SteadyIntervals$Onset[minik] + SteadyIntervals$Count[minik] - 1
+        }
+        
+        minik <- minik + 1
+      }
+      
+    rm(minik)
+    
+    minik <- 1
+    
+    Steady_Segments <- Steady_Segments %>%
+         dplyr::mutate(SteadyID = NA)
+    
+     while(minik <= NROW(Steady_Segments)) {
+       
+       c <- 1
+       
+       while(c <= NROW(SteadyIntervals)){
+         activeRow <- Steady_Segments %>%
+          dplyr::filter(Row == minik) %>%
+           dplyr::mutate(SteadyID = ifelse(
+         Row >= SteadyIntervals$Onset[c] & Row <= SteadyIntervals$Offset[c], SteadyIntervals$SteadyID[c],
+           SteadyID))
+         
+         if(is.na(activeRow$SteadyID)) {
+            c <- c + 1   
+         } else {c <- NROW(SteadyIntervals) + 1}
+         
+       }
+       
+       rm(c)
+       
+        Steady_Segments <- Steady_Segments %>%
+          dplyr::filter(Row != minik) %>%
+          rbind(activeRow, .) %>%
+                      arrange(Row)
+        
+        rm(activeRow)
+        minik <- minik + 1
+     }
+    rm(SteadyIntervals, minik)
+    
+    Steady_Segments <- Steady_Segments %>%
+      dplyr::mutate(SteadyID = as.factor(SteadyID))
+    
+    tokenRef <- RefData %>%
+      dplyr::filter(Sex == vowelData$Sex[k]) %>%
+      dplyr::filter(Vowel == vowelData$Vowel[k])
+    
+    F2_Means <- split(Steady_Segments, Steady_Segments$SteadyID) %>%
+      purrr::map(~mean(.$F2_Hz,na.rm = T))
+    
+    SteadyStateID <- F2_Means %>%
+      dplyr::bind_rows() %>%
+      t() %>%
+      as.data.frame() %>%
+      dplyr::rename(F2_Hz = 1) %>%
+      dplyr::mutate(SteadyID = rownames(.),
+                    F2_Diff = abs(F2_Hz - tokenRef$F2_Ref)) %>%
+      dplyr::filter(F2_Diff == base::min(F2_Diff, na.rm =T)) %>%
+      dplyr::select(SteadyID) %>%
+      paste
+    
+    SteadyInterval <- Steady_Segments %>%
+      dplyr::filter(SteadyID == SteadyStateID)
+    
+    rm(SteadyStateID, F2_Means, tokenRef)
+    
+    vowelData <- vowelData %>%
+      filter(Row == k) %>%
+      dplyr::mutate(Onset_ms = first(SteadyInterval$Time_ms),
+                    Offset_ms = last(SteadyInterval$Time_ms),
+                    duration_ms = Offset_ms - Onset_ms,
+                    midValue_ms = duration_ms/2 + Onset_ms) %>%
+      bind_rows(., vowelData %>%
+                  filter(Row != k)) %>%
+      arrange(Row)
+    
+    tempMid <- SteadyInterval %>%
+      dplyr::mutate(tempMid = abs(Time_ms - vowelData$midValue_ms[k])) %>%
+      dplyr::filter(tempMid == first(base::min(tempMid, na.rm =T))) %>%
+      dplyr::select(Time_ms) %>%
+      data.table::first() %>%
+      as.numeric(paste())
+    
+    vowelData <- vowelData %>%
+      filter(Row == k) %>%
+      dplyr::mutate(F1_tempMid = SteadyInterval$F1_Hz[SteadyInterval$Time_ms==tempMid],
+                    F2_tempMid = SteadyInterval$F2_Hz[SteadyInterval$Time_ms==tempMid],
+                    F1_z_tempMid = SteadyInterval$F1_z[SteadyInterval$Time_ms==tempMid],
+                    F2_z_tempMid = SteadyInterval$F2_z[SteadyInterval$Time_ms==tempMid],
+                    F1_b_tempMid = SteadyInterval$F1_b[SteadyInterval$Time_ms==tempMid],
+                    F2_b_tempMid = SteadyInterval$F2_b[SteadyInterval$Time_ms==tempMid]) %>%
+      bind_rows(., vowelData %>%
+                  filter(Row != k)) %>%
+      arrange(Row)
+        }
+        
+    }
+    
+    
+    sheetname <- as.character(vowelData$TokenID)[k]
+    addWorksheet(wb = acousticSegments, sheetname)
+    openxlsx::writeData(wb = acousticSegments,
+                        sheet = sheetname,
+                        x = Formants_Segment)
+    
+    k <- k + 1
+    rm(tempMid, Offset, Onset, vowel)
+    
+  }
+  
+## Saving the vowelData
+  dir.create("Data/Raw Data", showWarnings = F)
+  dir.create("Data/Raw Data/Vowel Data", showWarnings = F)
+  rio::export(vowelData,
+              file = paste("Data/Raw Data/Vowel Data/",Speaker,"_vowelData.csv", sep = ""))
+  
+## Saving the Segment Data
+  dir.create("Data/Raw Data/Segment Data", showWarnings = F)
+  openxlsx::saveWorkbook(acousticSegments,
+                         paste("Data/Raw Data/Segment Data/",Speaker,"_SegmentData.xlsx", sep = ""),
+                         overwrite = TRUE)
+
+## Corner Dispersion ----
+  
+  wedge <- vowelData %>%
+    dplyr::group_by(Vowel) %>%
+    summarize(mean_F1 = mean(F1_tempMid),
+              mean_F2 = mean(F2_tempMid),
+              mean_F1_z = mean(F1_z_tempMid),
+              mean_F2_z = mean(F2_z_tempMid),
+              mean_F1_b = mean(F1_b_tempMid),
+              mean_F2_b = mean(F2_b_tempMid)) %>%
+    dplyr::filter(Vowel == "v")
+    
+  corner_dis <- vowelData %>%
+    dplyr::filter(Vowel != "v") %>%
+    dplyr::group_by(Vowel) %>%
+    summarize(mean_F1 = mean(F1_tempMid),
+              mean_F2 = mean(F2_tempMid),
+              mean_F1_z = mean(F1_z_tempMid),
+              mean_F2_z = mean(F2_z_tempMid),
+              mean_F1_b = mean(F1_b_tempMid),
+              mean_F2_b = mean(F2_b_tempMid)) %>%
+    dplyr::mutate(Vowel_ED = sqrt((mean_F1-wedge$mean_F1)^2 + (mean_F2-wedge$mean_F2)^2),
+                  Vowel_ED_z = sqrt((mean_F1_z-wedge$mean_F1_z)^2 + (mean_F2_z-wedge$mean_F2_z)^2),
+                  Vowel_ED_b = sqrt((mean_F1_b-wedge$mean_F1_b)^2 + (mean_F2_b-wedge$mean_F2_b)^2))
+  
+  Aco_Measures <- Aco_Measures %>%
+    filter(Row == NC) %>%
+    dplyr::mutate(vowel_ED = mean(corner_dis$Vowel_ED),
+                  vowel_ED_z = mean(corner_dis$Vowel_ED_z),
+                  vowel_ED_b = mean(corner_dis$Vowel_ED_b)) %>%
+    bind_rows(., Aco_Measures %>%
+                filter(Row != NC)) %>%
+    arrange(Row)
+    
+# Plot Corner Dispersion
+    if(savePlots == TRUE) {
+      # Changing to IPA symbols
+      corner_dis <- corner_dis %>%
+        dplyr::mutate(Vowel = case_when(
+          Vowel == "ae" ~ "æ",
+          TRUE ~ Vowel
+        ))
+      
+      wedge <- wedge %>%
+        dplyr::mutate(Vowel = case_when(
+          Vowel == "v" ~ "ʌ",
+          TRUE ~ Vowel
+        ))
+      
+      CDplot <- ggplot(aes(x=F2_b,
+                           y=F1_b),
+                       data = Formants_PRAAT,
+                       inherit.aes = FALSE) + 
+      geom_point(shape = 21,
+                 alpha = .5,
+                 color = "grey") + 
+      geom_line(aes(x = mean_F2_b,
+                    y = mean_F1_b),
+                data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  dplyr::filter(Vowel == "i") %>%
+                  rbind(.,wedge),
+                color = "black",
+                size = 1.5,
+                alpha = .5) +
+      geom_line(aes(x = mean_F2_b,
+                    y = mean_F1_b),
+                data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  dplyr::filter(Vowel == "a") %>%
+                  rbind(.,wedge),
+                color = "black",
+                size = 1.5,
+                alpha = .5) +
+      geom_line(aes(x = mean_F2_b,
+                    y = mean_F1_b),
+                data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  dplyr::filter(Vowel == "æ") %>%
+                  rbind(.,wedge),
+                color = "black",
+                size = 1.5,
+                alpha = .5) +
+      geom_line(aes(x = mean_F2_b,
+                    y = mean_F1_b),
+                data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  dplyr::filter(Vowel == "u") %>%
+                  rbind(.,wedge),
+                color = "black",
+                size = 1.5,
+                alpha = .5) +
+      geom_point(aes(x = mean_F2_b,
+                     y = mean_F1_b,
+                     color = Vowel),
+                 data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  rbind(.,wedge),
+                 inherit.aes = FALSE,
+                 size = 5) +
+      scale_y_reverse() +
+      scale_x_reverse() +
+      theme_classic() + labs(title = paste(Speaker,"Corner Dispersion")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5)) +
+          scale_color_manual(values = c("a" = "#1AAD77",
+                                        "æ" = "#1279B5",
+                                        "i" = "#FFBF00",
+                                        "u" = "#FD7853",
+                                        "ʌ" = "#BF3178"))
+    CDplot
+    
+    dir.create(path = "Data/Plots", showWarnings = F)
+    dir.create(path = "Data/Plots/Corner Dispersion", showWarnings = F)
+    ggsave(filename = paste("Data/Plots/Corner Dispersion/",Speaker,"_CornerDispersion.png",sep = ""),
+           plot = last_plot(),
+           height = 7,
+           width = 7,
+           units = "in",
+           scale = .5)
+    }
+  
+      rm(corner_dis, wedge)
+## Vowel Space Area ----
+  VSA_coords <- vowelData %>%
+    dplyr::filter(Vowel != "v") %>%
+    dplyr::group_by(Vowel) %>%
+    summarize(mean_F1 = mean(F1_tempMid),
+              mean_F2 = mean(F2_tempMid),
+              mean_F1_z = mean(F1_z_tempMid),
+              mean_F2_z = mean(F2_z_tempMid),
+              mean_F1_b = mean(F1_b_tempMid),
+              mean_F2_b = mean(F2_b_tempMid)) 
+  
+  Aco_Measures <- Aco_Measures %>%
+      filter(Row == NC) %>%
+      dplyr::mutate(VSA = geometry::polyarea(VSA_coords$mean_F1, VSA_coords$mean_F2),
+                    VSA_z = geometry::polyarea(VSA_coords$mean_F1_z, VSA_coords$mean_F2_z),
+                    VSA_b = geometry::polyarea(VSA_coords$mean_F1_b, VSA_coords$mean_F2_b)) %>%
+      bind_rows(., Aco_Measures %>%
+                  filter(Row != NC)) %>%
+      arrange(Row)
+  
+### Plotting VSA
+  if(savePlots == TRUE) {
+    VSA_coords <- VSA_coords %>%
+        dplyr::mutate(Vowel = case_when(
+          Vowel == "ae" ~ "æ",
+          TRUE ~ Vowel
+        ))
+    
+    VSAplot <- ggplot(aes(x = F2_b,
+                          y = F1_b),
+                      data = Formants_PRAAT,
+                      inherit.aes = FALSE) + 
+      geom_point(shape = 21) + 
+      geom_polygon(aes(x = mean_F2_b,
+                       y = mean_F1_b),
+                   data = VSA_coords,
+                   alpha = .5,
+                   color = "light grey",
+                   fill=NA,
+                   size = 1.5) +
+      geom_point(aes(x = mean_F2_b,
+                     y = mean_F1_b,
+                     color = Vowel),
+                 data = VSA_coords,
+                 inherit.aes = FALSE,
+                 size = 5) +
+      scale_y_reverse() +
+      scale_x_reverse() +
+      theme_classic() + labs(title = paste(Speaker,"VSA")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5)) +
+                scale_color_manual(values = c("a" = "#1AAD77",
+                                        "æ" = "#1279B5",
+                                        "i" = "#FFBF00",
+                                        "u" = "#FD7853"))
+    VSAplot
+    
+    dir.create("Data/Plots/Vowel Space Area", showWarnings = F)
+    ggsave(filename = paste("Data/Plots/Vowel Space Area/",Speaker,"_VSA.png",sep = ""),
+           plot = last_plot(),
+           height = 7,
+           width = 7,
+           units = "in",
+           scale = .75)
+    
+  }
+  
+  rm(VSA_coords)
+  
+## Hull ----
+  
+  Aco_Measures <- Aco_Measures %>%
+      filter(Row == NC) %>%
+      dplyr::mutate(Hull = cHull(Formants_PRAAT$F1_Hz, Formants_PRAAT$F2_Hz),
+                    Hull_z = cHull(Formants_PRAAT$F1_z, Formants_PRAAT$F2_z),
+                    Hull_b = cHull(Formants_PRAAT$F1_b, Formants_PRAAT$F2_b)) %>%
+      bind_rows(., Aco_Measures %>%
+                  filter(Row != NC)) %>%
+      arrange(Row)
+### Plotting Hull
+    if(savePlots == TRUE) {
+      convexCoords <- Formants_PRAAT %>%
+        dplyr::select(F1_b, F2_b) %>%
+        as.matrix() %>%
+        grDevices::chull()
+      convex <- Formants_PRAAT %>%
+        slice(convexCoords)
+
+      hullPlot <- ggplot(aes(F2_b, F1_b),
+                         data = Formants_PRAAT) +
+        geom_point(shape = 21) +
+        geom_polygon(data = convex,
+                     alpha = .5,
+                     color = "#1279B5",
+                     fill = NA,
+                     size = 1.5) +
+        scale_y_reverse() +
+        scale_x_reverse() +
+        theme_classic() + labs(title = paste(Speaker,"VSA Hull")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme(plot.title = element_text(hjust = 0.5))
+      hullPlot
+      
+    dir.create("Data/Plots/VSA Hull", showWarnings = F)
+    ggsave(filename = paste("Data/Plots/VSA Hull/",Speaker,"_Hull.png",sep = ""),
+           plot = last_plot(),
+           height = 7,
+           width = 7,
+           units = "in",
+           scale = .75)
+    }
+  
+## Vowel Space Density ----
+Formants_PRAAT <- Formants_PRAAT %>%
+  dplyr::mutate(F1_med = (F1_Hz - median(F1_Hz))/median(F1_Hz)) %>%
+  dplyr::mutate(F2_med = (F2_Hz - median(F2_Hz))/median(F2_Hz))
+
+## Median Normalized Density ----
+# selecting the bandwidth
+H_hpi <- Hpi(x = Formants_PRAAT[,c("F2_med","F1_med")], pilot = "samse", pre = "scale", binned = T)
+
+# compute 2d kde
+k <- kde(x = Formants_PRAAT[,c("F2_med","F1_med")],
+         H = H_hpi,
+         binned = T,
+         gridsize = 250)
+
+#density <- k[["estimate"]]
+
+# Before we can plot the density estimate we need to melt it into long format
+mat.melted <- melt(k$estimate)
+names(mat.melted) <- c("x", "y", "density")
+
+# We need to add two more colums to preserve the axes units
+mat.melted$F2.med <- rep(k$eval.points[[1]], times = nrow(k$estimate))
+mat.melted$F1.med <- rep(k$eval.points[[2]], each = nrow(k$estimate))
+mat.melted$density <- scales::rescale(mat.melted$density, to = c(0, 1))
+
+# VSD - 25
+nVSD_25 <- mat.melted %>%
+  dplyr::filter(density > .25) %>%
+  dplyr::select(F2.med,F1.med)
+
+convexCoords <- nVSD_25 %>%
+  dplyr::select(F2.med, F1.med) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+nconvex_25 <- nVSD_25 %>%
+  slice(convexCoords)
+
+# VSD - 50
+nVSD_50 <- mat.melted %>%
+  dplyr::filter(density > .5) %>%
+  dplyr::select(F2.med,F1.med)
+
+convexCoords <- nVSD_50 %>%
+  dplyr::select(F2.med, F1.med) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+nconvex_50 <- nVSD_50 %>%
+  slice(convexCoords)
+
+# VSD - 75
+nVSD_75 <- mat.melted %>%
+  dplyr::filter(density > .75) %>%
+  dplyr::select(F2.med,F1.med)
+
+convexCoords <- nVSD_75 %>%
+  dplyr::select(F2.med, F1.med) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+nconvex_75 <- nVSD_75 %>%
+  slice(convexCoords)
+
+Aco_Measures <- Aco_Measures %>%
+      filter(Row == NC) %>%
+      dplyr::mutate(Hull_nVSD_25 = cHull((nVSD_25$F1.med), (nVSD_25$F2.med)),
+                    Hull_nVSD_50 = cHull((nVSD_50$F1.med), (nVSD_50$F2.med)),
+                    Hull_nVSD_75 = cHull((nVSD_75$F1.med), (nVSD_75$F2.med))) %>%
+      bind_rows(., Aco_Measures %>%
+                  filter(Row != NC)) %>%
+      arrange(Row)
+
+# Plotting Median Normalized VSD 
+    if(savePlots == TRUE) {
+      rf <- colorRampPalette(rev(brewer.pal(11, "Spectral")))
+      r <- rf(32)
+
+    VSDplot <- ggplot(mat.melted,
+                      aes(x = F2.med,
+                          y = F1.med,
+                          fill = density)) + 
+      geom_tile() + 
+      #coord_equal() + 
+      scale_fill_gradientn(colours = r) +
+      scale_x_reverse(expand = c(0, 0), 
+                      breaks = round(seq(min(mat.melted$F2.med), 
+                                         max(mat.melted$F2.med)))) +
+      scale_y_reverse(expand = c(0, 0),
+                      breaks = round(seq(min(mat.melted$F1.med),
+                                         max(mat.melted$F1.med)))) + 
+      ylab("F1 (Median)") + xlab("F2 (Median)") +
+      geom_polygon(data = nconvex_25, alpha = .5, color = "black", fill = NA) +
+      geom_polygon(data = nconvex_75, alpha = .5, color = "black", fill = NA)
+    VSDplot
+      
+    dir.create("Data/Plots/Vowel Space Density_Median", showWarnings = F)
+    ggsave(filename = paste("Data/Plots/Vowel Space Density_Median/",Speaker,"_medVSD.png",sep = ""),
+           plot = last_plot(),
+           height = 7,
+           width = 7,
+           units = "in",
+           scale = .75)
+    }
+
+## Z Normalized Density ----
+# selecting the bandwidth
+H_hpi <- Hpi(x = Formants_PRAAT[,c("F2_z","F1_z")], pilot = "samse", pre = "scale", binned = T)
+
+# compute 2d kde
+k <- kde(x = Formants_PRAAT[,c("F2_z","F1_z")],
+         H = H_hpi,
+         binned = T,
+         gridsize = 250)
+
+#density <- k[["estimate"]]
+
+# Before we can plot the density estimate we need to melt it into long format
+mat.melted <- melt(k$estimate)
+names(mat.melted) <- c("x", "y", "density")
+
+# We need to add two more colums to preserve the axes units
+mat.melted$F2.z <- rep(k$eval.points[[1]], times = nrow(k$estimate))
+mat.melted$F1.z <- rep(k$eval.points[[2]], each = nrow(k$estimate))
+mat.melted$density <- scales::rescale(mat.melted$density, to = c(0, 1))
+
+# VSD - 25
+nVSD_25 <- mat.melted %>%
+  dplyr::filter(density > .25) %>%
+  dplyr::select(F2.z,F1.z)
+
+convexCoords <- nVSD_25 %>%
+  dplyr::select(F2.z, F1.z) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+nconvex_25 <- nVSD_25 %>%
+  slice(convexCoords)
+
+# VSD - 50
+nVSD_50 <- mat.melted %>%
+  dplyr::filter(density > .5) %>%
+  dplyr::select(F2.z,F1.z)
+
+convexCoords <- nVSD_50 %>%
+  dplyr::select(F2.z, F1.z) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+nconvex_50 <- nVSD_50 %>%
+  slice(convexCoords)
+
+# VSD - 75
+nVSD_75 <- mat.melted %>%
+  dplyr::filter(density > .75) %>%
+  dplyr::select(F2.z,F1.z)
+
+convexCoords <- nVSD_75 %>%
+  dplyr::select(F2.z, F1.z) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+nconvex_75 <- nVSD_75 %>%
+  slice(convexCoords)
+
+Aco_Measures <- Aco_Measures %>%
+      filter(Row == NC) %>%
+      dplyr::mutate(Hull_zVSD_25 = cHull((nVSD_25$F1.z), (nVSD_25$F2.z)),
+                    Hull_zVSD_50 = cHull((nVSD_50$F1.z), (nVSD_50$F2.z)),
+                    Hull_zVSD_75 = cHull((nVSD_75$F1.z), (nVSD_75$F2.z))) %>%
+      bind_rows(., Aco_Measures %>%
+                  filter(Row != NC)) %>%
+      arrange(Row)
+
+# Plotting Z Normalized VSD 
+    if(is.na(savePlots)) {
+      rf <- colorRampPalette(rev(brewer.pal(11, "Spectral")))
+      r <- rf(32)
+
+    VSDplot <- ggplot(mat.melted,
+                      aes(x = F2.z,
+                          y = F1.z,
+                          fill = density)) + 
+      geom_tile() + 
+      #coord_equal() + 
+      scale_fill_gradientn(colours = r) +
+      scale_x_reverse(expand = c(0, 0), 
+                      breaks = round(seq(min(mat.melted$F2.z), 
+                                         max(mat.melted$F2.z)))) +
+      scale_y_reverse(expand = c(0, 0),
+                      breaks = round(seq(min(mat.melted$F1.z),
+                                         max(mat.melted$F1.z)))) + 
+      ylab("F1 (z)") + xlab("F2 (z)") +
+      geom_polygon(data = nconvex_25, alpha = .5, color = "black", fill = NA) +
+      geom_polygon(data = nconvex_75, alpha = .5, color = "black", fill = NA)
+    VSDplot
+      
+    dir.create("Data/Plots/Vowel Space Density_Z", showWarnings = F)
+    ggsave(filename = paste("Data/Plots/Vowel Space Density_Z/",Speaker,"_zVSD.png",sep = ""),
+           plot = last_plot(),
+           height = 7,
+           width = 7,
+           units = "in",
+           scale = .75)
+    }
+
+## Bark Normalized Density ----
+# selecting the bandwidth
+H_hpi <- Hpi(x = Formants_PRAAT[,c("F2_b","F1_b")], pilot = "samse", pre = "scale", binned = T)
+
+# compute 2d kde
+k <- kde(x = Formants_PRAAT[,c("F2_b","F1_b")],
+         H = H_hpi,
+         binned = T,
+         gridsize = 250)
+
+#density <- k[["estimate"]]
+
+# Before we can plot the density estimate we need to melt it into long format
+mat.melted <- melt(k$estimate)
+names(mat.melted) <- c("x", "y", "density")
+
+# We need to add two more colums to preserve the axes units
+mat.melted$F2.b <- rep(k$eval.points[[1]], times = nrow(k$estimate))
+mat.melted$F1.b <- rep(k$eval.points[[2]], each = nrow(k$estimate))
+mat.melted$density <- scales::rescale(mat.melted$density, to = c(0, 1))
+
+# VSD - 25
+nVSD_25 <- mat.melted %>%
+  dplyr::filter(density > .25) %>%
+  dplyr::select(F2.b,F1.b)
+
+convexCoords <- nVSD_25 %>%
+  dplyr::select(F2.b, F1.b) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+nconvex_25 <- nVSD_25 %>%
+  slice(convexCoords)
+
+# VSD - 50
+nVSD_50 <- mat.melted %>%
+  dplyr::filter(density > .5) %>%
+  dplyr::select(F2.b,F1.b)
+
+convexCoords <- nVSD_50 %>%
+  dplyr::select(F2.b, F1.b) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+nconvex_50 <- nVSD_50 %>%
+  slice(convexCoords)
+
+# VSD - 75
+nVSD_75 <- mat.melted %>%
+  dplyr::filter(density > .75) %>%
+  dplyr::select(F2.b,F1.b)
+
+convexCoords <- nVSD_75 %>%
+  dplyr::select(F2.b, F1.b) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+nconvex_75 <- nVSD_75 %>%
+  slice(convexCoords)
+
+Aco_Measures <- Aco_Measures %>%
+      filter(Row == NC) %>%
+      dplyr::mutate(Hull_bVSD_25 = cHull((nVSD_25$F1.b), (nVSD_25$F2.b)),
+                    Hull_bVSD_50 = cHull((nVSD_50$F1.b), (nVSD_50$F2.b)),
+                    Hull_bVSD_75 = cHull((nVSD_75$F1.b), (nVSD_75$F2.b))) %>%
+      bind_rows(., Aco_Measures %>%
+                  filter(Row != NC)) %>%
+      arrange(Row)
+
+# Plotting Z Normalized VSD 
+    if(savePlots == TRUE) {
+      rf <- colorRampPalette(rev(brewer.pal(11, "Spectral")))
+      r <- rf(32)
+
+    VSDplot <- ggplot(mat.melted,
+                      aes(x = F2.b,
+                          y = F1.b,
+                          fill = density)) + 
+      geom_tile() + 
+      #coord_equal() + 
+      scale_fill_gradientn(colours = r) +
+      scale_x_reverse(expand = c(0, 0), 
+                      breaks = round(seq(min(mat.melted$F2.b), 
+                                         max(mat.melted$F2.b)))) +
+      scale_y_reverse(expand = c(0, 0),
+                      breaks = round(seq(min(mat.melted$F1.b),
+                                         max(mat.melted$F1.b)))) + 
+      ylab("F1 (bark)") + xlab("F2 (bark)") +
+      geom_polygon(data = nconvex_25, alpha = .5, color = "black", fill = NA) +
+      geom_polygon(data = nconvex_75, alpha = .5, color = "black", fill = NA)
+    VSDplot
+      
+    dir.create("Data/Plots/Vowel Space Density_Bark", showWarnings = F)
+    ggsave(filename = paste("Data/Plots/Vowel Space Density_Bark/",Speaker,"_bVSD.png",sep = ""),
+           plot = last_plot(),
+           height = 7,
+           width = 7,
+           units = "in",
+           scale = .75)
+    }
+
+## Non-normalized Density ----
+# selecting the bandwidth
+H_hpi <- Hpi(x = Formants_PRAAT[,c("F2_Hz","F1_Hz")], pilot = "samse", pre = "scale", binned = T)
+
+# compute 2d kde
+k <- kde(x = Formants_PRAAT[,c("F2_Hz","F1_Hz")],
+         H = H_hpi,
+         binned = T,
+         gridsize = 250)
+
+#density <- k[["estimate"]]
+
+# Before we can plot the density estimate we need to melt it into long format
+mat.melted <- melt(k$estimate)
+names(mat.melted) <- c("x", "y", "density")
+
+# We need to add two more colums to preserve the axes units
+mat.melted$F2.Hz <- rep(k$eval.points[[1]], times = nrow(k$estimate))
+mat.melted$F1.Hz <- rep(k$eval.points[[2]], each = nrow(k$estimate))
+mat.melted$density <- scales::rescale(mat.melted$density, to = c(0, 1))
+
+# VSD - 25
+VSD_25 <- mat.melted %>%
+  dplyr::filter(density > .25) %>%
+  dplyr::select(F2.Hz,F1.Hz)
+
+convexCoords <- VSD_25 %>%
+  dplyr::select(F2.Hz, F1.Hz) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+convex_25 <- VSD_25 %>%
+  slice(convexCoords)
+
+# VSD - 50
+VSD_50 <- mat.melted %>%
+  dplyr::filter(density > .5) %>%
+  dplyr::select(F2.Hz,F1.Hz)
+
+convexCoords <- VSD_50 %>%
+  dplyr::select(F2.Hz, F1.Hz) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+convex_50 <- VSD_50 %>%
+  slice(convexCoords)
+
+# VSD - 75
+VSD_75 <- mat.melted %>%
+  dplyr::filter(density > .75) %>%
+  dplyr::select(F2.Hz,F1.Hz)
+
+convexCoords <- VSD_75 %>%
+  dplyr::select(F2.Hz, F1.Hz) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+convex_75 <- VSD_75 %>%
+  slice(convexCoords)
+
+Aco_Measures <- Aco_Measures %>%
+      filter(Row == NC) %>%
+      dplyr::mutate(Hull_VSD_25 = cHull((VSD_25$F1.Hz), (VSD_25$F2.Hz)),
+                    Hull_VSD_50 = cHull((VSD_50$F1.Hz), (VSD_50$F2.Hz)),
+                    Hull_VSD_75 = cHull((VSD_75$F1.Hz), (VSD_75$F2.Hz))) %>%
+      bind_rows(., Aco_Measures %>%
+                  filter(Row != NC)) %>%
+      arrange(Row)
+
+rm(k, convex_25, convex_50, convex_75, H_hpi, mat.melted, VSD_25, VSD_50, VSD_75)
+
+print(paste("Analysis is complete for ", Speaker,". (",round((NC/NROW(Speakers)*100),digits = 2),"%)", sep = ""))
+
+NC <- NC + 1
+  
+}
+
+mydir = "Data/Raw Data/Vowel Data/"
+myfiles = list.files(path=mydir, pattern="*.csv", full.names=TRUE)
+allVoweldata <- plyr::ldply(myfiles, read.csv) %>%
+  dplyr::mutate(Sex = ifelse(Sex == "FALSE", "F", "M")) %>%
+  dplyr::filter(Vowel != "")
+
+Aco_Measures <- Aco_Measures %>%
+  dplyr::select(!Row) %>%
+  base::merge(.,Speaker_VAS, by.x = "Speaker", by.y = "SpeakerID",
+              all = T) %>%
+  base::merge(.,Speaker_transAcc, by.x = "Speaker", by.y = "SpeakerID",
+              all = T)
+
+dir.create("Data/Prepped Data", showWarnings = F)
+write.csv(Aco_Measures, file = "Data/Prepped Data/AcousticMeasures.csv")
+write.csv(allVoweldata %>% dplyr::select(!Row), file = "Data/Prepped Data/Vowel Data.csv")
+
+print("Analysis complete.")
+
+```
+
+## Looking for Outliers
+```{r}
+RefData <- read.xlsx("Data/Speaker Data/Reference Data/Hillenbrand Vowel Data.xlsx",
+                     sheet = "Hillenbrand Vowel Data") %>%
+  dplyr::rename(Speaker = 1,
+                F1_Hz = 4,
+                F2_Hz = 5) %>%
+  dplyr::select(Speaker, F1_Hz, F2_Hz) %>%
+  dplyr::filter(!grepl("b|g",Speaker)) %>%
+  dplyr::mutate(Sex = ifelse(grepl("m",Speaker),"M","F"),
+                Vowel = case_when(
+                  grepl(pattern = "uw", Speaker) ~ "u",
+                  grepl(pattern = "ah", Speaker) ~ "a",
+                  grepl(pattern = "iy", Speaker) ~ "i",
+                  grepl(pattern = "uh", Speaker) ~ "v",
+                  grepl(pattern = "ae", Speaker) ~ "ae"
+                )) %>%
+  dplyr::filter(!is.na(Vowel)) %>%
+  dplyr::select(!Speaker) %>%
+  dplyr::group_by(Sex, Vowel) %>%
+  dplyr::summarise(F1_Ref = mean(F1_Hz),
+                   F2_Ref = mean(F2_Hz))
+
+AcousticOutliers <- read.csv(file = "Data/Prepped Data/Vowel Data.csv") %>%
+  dplyr::select(!X) %>%
+  dplyr::group_by(Sex, Vowel) %>%
+  dplyr::mutate(F1_sd = abs(scale(F1_tempMid)),
+                F2_sd = abs(scale(F2_tempMid))) %>%
+  dplyr::select(!c(Onset_ms:Offset_ms, duration_ms, TokenID, VowelID))
+
+write.csv(AcousticOutliers, file = "Data/Prepped Data/Vowel Data Outliers.csv")
+
+acoMeasures <- read.csv(file = "Data/Prepped Data/AcousticMeasures.csv") %>%
+  group_by(Etiology,Sex) %>%
+  dplyr::mutate(VSA_z = abs(scale(VSA)),
+                ED_z = abs(scale(vowel_ED)))
+```
+
+# Prepping Reliability Data
+```{r}
+relData <- allVoweldata %>%
+  dplyr::select(!c(Onset_ms,Offset_ms,duration_ms,F1_z_tempMid,F2_z_tempMid)) %>%
+  dplyr::select(Speaker:midValue_ms) %>%
+  dplyr::relocate(TokenID, .after = Token) %>%
+  dplyr::relocate(VowelID, .after = Vowel) %>%
+  dplyr::filter(grepl("AF1|PDF5|AM5|HDM8|HDM3|ALSM7|PDF2|ALSF5",Speaker)) %>%
+  dplyr::select(!Token:TokenID) 
+#%>%
+ #group_by(Vowel) %>%
+  #dplyr::mutate(F1_sd = abs(base::scale(F1_tempMid)),F2_sd = abs(base::scale(F2_tempMid)))
+
+firstMeasure <- relData %>%
+  dplyr::filter(!grepl("_rel",Speaker)) %>%
+    dplyr::rename(F1 = F1_tempMid,
+                F2 = F2_tempMid,
+                midValue_ms = midValue_ms)
+
+secondMeasure <- relData %>%
+  dplyr::filter(grepl("_rel",Speaker)) %>%
+  dplyr::mutate(Speaker = gsub("_rel","",Speaker)) %>%
+  dplyr::rename(F1_rel = F1_tempMid,
+                F2_rel = F2_tempMid,
+                midValue_ms_rel = midValue_ms)
+
+relData <- base::merge(firstMeasure,secondMeasure,
+                               by = intersect(names(firstMeasure), names(secondMeasure)),
+                               all = T) %>%
+  dplyr::mutate(F2_diff = abs(F2-F2_rel),
+                F1_diff = abs(F1-F1_rel),
+                ms_diff = abs(midValue_ms - midValue_ms_rel))
+
+write.csv(relData,
+          file = "Data/Prepped Data/Reliability Data.csv")
+
+relData
+```
+
+# Scatterplots
+## Bark
+```{r}
+Aco_Measures <- Aco_Measures %>%
+  dplyr::filter(!grepl("_rel",Speaker))
+# Transcription Acc
+OT_VSA <- ggplot(Aco_Measures, aes(x=VSA_b, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_VSA
+
+OT_CornDisp <- ggplot(Aco_Measures, aes(x=vowel_ED_b, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_CornDisp
+
+OT_Hull <- ggplot(Aco_Measures, aes(x=Hull_b, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_Hull
+
+OT_VSD25 <- ggplot(Aco_Measures, aes(x=Hull_bVSD_25, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_VSD25
+
+OT_VSD75 <- ggplot(Aco_Measures, aes(x=Hull_bVSD_75, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_VSD75
+
+# VAS
+VAS_VSA <- ggplot(Aco_Measures, aes(x=VSA_b, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_VSA
+
+VAS_CornDisp <- ggplot(Aco_Measures, aes(x=vowel_ED_b, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_CornDisp
+
+VAS_Hull <- ggplot(Aco_Measures, aes(x=Hull_b, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_Hull
+
+VAS_VSD25 <- ggplot(Aco_Measures, aes(x=Hull_bVSD_25, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_VSD25
+
+VAS_VSD75 <- ggplot(Aco_Measures, aes(x=Hull_bVSD_75, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_VSD75
+
+ggpubr::ggarrange(OT_VSA,VAS_VSA,
+                  OT_CornDisp,VAS_CornDisp,
+                  OT_Hull,VAS_Hull,
+                  OT_VSD25,VAS_VSD25,
+                  OT_VSD75,VAS_VSD75,
+                  ncol = 2,
+                  nrow = 5)
+dir.create("Data/Plots/Scatter Plots", showWarnings = F)
+ggsave("Data/Plots/Scatter Plots/barkDVs.png",
+       plot = last_plot(),
+       height = 12,
+       width = 8,
+       scale = .75)
+```
+
+## Lobonov
+```{r}
+Aco_Measures <- Aco_Measures %>%
+  dplyr::filter(!grepl("_rel",Speaker))
+# Transcription Acc
+OT_VSA <- ggplot(Aco_Measures, aes(x=VSA_z, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_VSA
+
+OT_CornDisp <- ggplot(Aco_Measures, aes(x=vowel_ED_z, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_CornDisp
+
+OT_Hull <- ggplot(Aco_Measures, aes(x=Hull_z, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_Hull
+
+OT_VSD25 <- ggplot(Aco_Measures, aes(x=Hull_zVSD_25, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_VSD25
+
+OT_VSD75 <- ggplot(Aco_Measures, aes(x=Hull_zVSD_75, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_VSD75
+
+# VAS
+VAS_VSA <- ggplot(Aco_Measures, aes(x=VSA_z, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_VSA
+
+VAS_CornDisp <- ggplot(Aco_Measures, aes(x=vowel_ED_z, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_CornDisp
+
+VAS_Hull <- ggplot(Aco_Measures, aes(x=Hull_z, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_Hull
+
+VAS_VSD25 <- ggplot(Aco_Measures, aes(x=Hull_zVSD_25, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_VSD25
+
+VAS_VSD75 <- ggplot(Aco_Measures, aes(x=Hull_zVSD_75, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_VSD75
+
+ggpubr::ggarrange(OT_VSA,VAS_VSA,
+                  OT_CornDisp,VAS_CornDisp,
+                  OT_Hull,VAS_Hull,
+                  OT_VSD25,VAS_VSD25,
+                  OT_VSD75,VAS_VSD75,
+                  ncol = 2,
+                  nrow = 5)
+dir.create("Data/Plots/Scatter Plots", showWarnings = F)
+ggsave("Data/Plots/Scatter Plots/lobonovDVs.png",
+       plot = last_plot(),
+       height = 12,
+       width = 8,
+       scale = .75)
+```
+
+## Hz
+```{r}
+Aco_Measures <- Aco_Measures %>%
+  dplyr::filter(!grepl("_rel",Speaker))
+# Transcription Acc
+OT_VSA <- ggplot(Aco_Measures, aes(x=VSA, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_VSA
+
+OT_CornDisp <- ggplot(Aco_Measures, aes(x=vowel_ED, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_CornDisp
+
+OT_Hull <- ggplot(Aco_Measures, aes(x=Hull, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_Hull
+
+OT_VSD25 <- ggplot(Aco_Measures, aes(x=Hull_VSD_25, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_VSD25
+
+OT_VSD75 <- ggplot(Aco_Measures, aes(x=Hull_VSD_75, y=transAcc)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+OT_VSD75
+
+# VAS
+VAS_VSA <- ggplot(Aco_Measures, aes(x=VSA, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_VSA
+
+VAS_CornDisp <- ggplot(Aco_Measures, aes(x=vowel_ED, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_CornDisp
+
+VAS_Hull <- ggplot(Aco_Measures, aes(x=Hull, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_Hull
+
+VAS_VSD25 <- ggplot(Aco_Measures, aes(x=Hull_VSD_25, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_VSD25
+
+VAS_VSD75 <- ggplot(Aco_Measures, aes(x=Hull_VSD_75, y=VAS)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic()
+VAS_VSD75
+
+ggpubr::ggarrange(OT_VSA,VAS_VSA,
+                  OT_CornDisp,VAS_CornDisp,
+                  OT_Hull,VAS_Hull,
+                  OT_VSD25,VAS_VSD25,
+                  OT_VSD75,VAS_VSD75,
+                  ncol = 2,
+                  nrow = 5)
+dir.create("Data/Plots/Scatter Plots", showWarnings = F)
+ggsave("Data/Plots/Scatter Plots/HzDVs.png",
+       plot = last_plot(),
+       height = 12,
+       width = 8,
+       scale = .75)
+```
+
+# Presentation Plots
+## Measure Examples
+```{r}
+formantColor <- "grey"
+formantAlpha <- .95
+lineColor <- "white"
+lineAlpha <- .8
+
+vowelData <- rio::import("Data/Prepped Data/Vowel Data.csv") %>%
+  dplyr::filter(Speaker == "AF8")
+
+  Pitch_PRAAT <- list.files(path = paste("Data/Speaker Data/AF8", sep = ""), 
+                              pattern = ".Pitch", ignore.case = T) %>%
+    paste("Data/Speaker Data/AF8/",., sep = "") %>%
+    read.delim(., header = F) %>%
+    dplyr::rename(Pitch = V1) %>%
+    dplyr::mutate(Pitch = gsub("--undefined--",NA,Pitch),
+                  Pitch = as.numeric(Pitch))
+  
+  Formants_PRAAT <- list.files(path = paste("Data/Speaker Data/AF8", sep = ""), 
+                              pattern = "_Formant", ignore.case = T) %>%
+    paste("Data/Speaker Data/AF8/",., sep = "") %>%
+    read.delim(., header = T) %>%
+    dplyr::select(!c(nformants, B1.Hz., B2.Hz., B3.Hz., F4.Hz., B4.Hz., F5.Hz., B5.Hz.)) %>%
+    dplyr::rename(Time_s = time.s.,
+                  F1_Hz = F1.Hz.,
+                  F2_Hz = F2.Hz.,
+                  F3_Hz = F3.Hz.) %>%
+    dplyr::mutate(F1_Hz = ifelse(F1_Hz == 0, NA, F1_Hz),
+                  F2_Hz = ifelse(F2_Hz == 0, NA, F2_Hz),
+                  F3_Hz = ifelse(F3_Hz == 0, NA, F3_Hz)) %>%
+    dplyr::mutate(F1_Hz = as.numeric(F1_Hz),
+                  F2_Hz = as.numeric(F2_Hz),
+                  F3_Hz = suppressWarnings(as.numeric(F3_Hz)),
+                  Time_ms = Time_s / 1000,
+                  F1_kHz = F1_Hz / 1000,
+                  F2_kHz = F2_Hz / 1000,
+                  F3_kHz = F3_Hz / 1000) %>%
+    dplyr::select(!Time_s) %>%
+    dplyr::relocate(Time_ms, .before = F1_Hz) %>%
+    cbind(.,Pitch_PRAAT)
+  
+  c <- 2
+  while(c < NROW(Formants_PRAAT)){
+    Formants_PRAAT$F1_Hz[c] <- ifelse(is.na(Formants_PRAAT$F1_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F1_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F1_Hz[c])
+    Formants_PRAAT$F2_Hz[c] <- ifelse(is.na(Formants_PRAAT$F2_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F2_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F2_Hz[c])
+    c <- c + 1
+  }
+  rm(c)
+  
+  Formants_PRAAT <- Formants_PRAAT %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+    dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T))) %>%
+    #dplyr::mutate(mDistOutlier = (stats::pchisq(mDist, df=1, lower.tail=FALSE)) < .001) %>%
+    dplyr::filter(mDist_sd < 2) %>%
+    dplyr::select(!c(F1_mad, F2_mad, mDist, mDist_sd)) %>%
+    dplyr::mutate(F1_z = scale(F1_Hz, center = TRUE),
+                  F2_z = scale(F2_Hz, center = TRUE),
+                  F3_z = scale(F3_Hz, center = TRUE),
+                  F1_b = emuR::bark(F1_Hz),
+                  F2_b = emuR::bark(F2_Hz),
+                  F3_b = emuR::bark(F3_Hz))
+  
+  rm(Pitch_PRAAT)
+  
+  
+## Corner Dispersion ----
+  wedge <- vowelData %>%
+    dplyr::group_by(Vowel) %>%
+    summarize(mean_F1 = mean(F1_tempMid),
+              mean_F2 = mean(F2_tempMid),
+              mean_F1_z = mean(F1_z_tempMid),
+              mean_F2_z = mean(F2_z_tempMid),
+              mean_F1_b = mean(F1_b_tempMid),
+              mean_F2_b = mean(F2_b_tempMid)) %>%
+    dplyr::filter(Vowel == "v")
+    
+  corner_dis <- vowelData %>%
+    dplyr::filter(Vowel != "v") %>%
+    dplyr::group_by(Vowel) %>%
+    summarize(mean_F1 = mean(F1_tempMid),
+              mean_F2 = mean(F2_tempMid),
+              mean_F1_z = mean(F1_z_tempMid),
+              mean_F2_z = mean(F2_z_tempMid),
+              mean_F1_b = mean(F1_b_tempMid),
+              mean_F2_b = mean(F2_b_tempMid)) %>%
+    dplyr::mutate(Vowel_ED = sqrt((mean_F1-wedge$mean_F1)^2 + (mean_F2-wedge$mean_F2)^2),
+                  Vowel_ED_z = sqrt((mean_F1_z-wedge$mean_F1_z)^2 + (mean_F2_z-wedge$mean_F2_z)^2),
+                  Vowel_ED_b = sqrt((mean_F1_b-wedge$mean_F1_b)^2 + (mean_F2_b-wedge$mean_F2_b)^2))
+
+    
+# Plot Corner Dispersion
+      # Changing to IPA symbols
+      corner_dis <- corner_dis %>%
+        dplyr::mutate(Vowel = case_when(
+          Vowel == "ae" ~ "æ",
+          TRUE ~ Vowel
+        ))
+      
+      wedge <- wedge %>%
+        dplyr::mutate(Vowel = case_when(
+          Vowel == "v" ~ "ʌ",
+          TRUE ~ Vowel
+        ))
+      
+      CDplot <- ggplot(aes(x=F2_b,
+                           y=F1_b),
+                       data = Formants_PRAAT,
+                       inherit.aes = FALSE) + 
+      geom_point(shape = 21,
+                 alpha = formantAlpha,
+                 color = formantColor) + 
+      geom_line(aes(x = mean_F2_b,
+                    y = mean_F1_b),
+                data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  dplyr::filter(Vowel == "i") %>%
+                  rbind(.,wedge),
+                color = lineColor,
+                size = 1.5,
+                alpha = lineAlpha) +
+      geom_line(aes(x = mean_F2_b,
+                    y = mean_F1_b),
+                data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  dplyr::filter(Vowel == "a") %>%
+                  rbind(.,wedge),
+                color = lineColor,
+                size = 1.5,
+                alpha = lineAlpha) +
+      geom_line(aes(x = mean_F2_b,
+                    y = mean_F1_b),
+                data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  dplyr::filter(Vowel == "æ") %>%
+                  rbind(.,wedge),
+                color = lineColor,
+                size = 1.5,
+                alpha = lineAlpha) +
+      geom_line(aes(x = mean_F2_b,
+                    y = mean_F1_b),
+                data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  dplyr::filter(Vowel == "u") %>%
+                  rbind(.,wedge),
+                color = lineColor,
+                size = 1.5,
+                alpha = lineAlpha) +
+      geom_point(aes(x = mean_F2_b,
+                     y = mean_F1_b,
+                     color = Vowel),
+                 data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  rbind(.,wedge),
+                 inherit.aes = FALSE,
+                 size = 5) +
+      scale_y_reverse() +
+      scale_x_reverse() +
+      theme_classic() + labs(title = paste("Corner Dispersion")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5)) +
+          scale_color_manual(values = c("a" = "#1AAD77",
+                                        "æ" = "#1279B5",
+                                        "i" = "#FFBF00",
+                                        "u" = "#FD7853",
+                                        "ʌ" = "#BF3178"))
+    CDplot
+    
+      rm(corner_dis, wedge)
+      
+## Vowel Space Area ----
+  VSA_coords <- vowelData %>%
+    dplyr::filter(Vowel != "v") %>%
+    dplyr::group_by(Vowel) %>%
+    summarize(mean_F1 = mean(F1_tempMid),
+              mean_F2 = mean(F2_tempMid),
+              mean_F1_z = mean(F1_z_tempMid),
+              mean_F2_z = mean(F2_z_tempMid),
+              mean_F1_b = mean(F1_b_tempMid),
+              mean_F2_b = mean(F2_b_tempMid)) 
+  
+### Plotting VSA
+    VSA_coords <- VSA_coords %>%
+        dplyr::mutate(Vowel = case_when(
+          Vowel == "ae" ~ "æ",
+          TRUE ~ Vowel
+        ))
+    
+    VSAplot <- ggplot(aes(x = F2_b,
+                          y = F1_b),
+                      data = Formants_PRAAT,
+                      inherit.aes = FALSE) + 
+      geom_point(shape = 21,
+                 alpha = formantAlpha,
+                 color = formantColor) + 
+      geom_polygon(aes(x = mean_F2_b,
+                       y = mean_F1_b),
+                   data = VSA_coords,
+                   alpha = lineAlpha,
+                   color = lineColor,
+                   fill=NA,
+                   size = 1.5) +
+      geom_point(aes(x = mean_F2_b,
+                     y = mean_F1_b,
+                     color = Vowel),
+                 data = VSA_coords,
+                 inherit.aes = FALSE,
+                 size = 5) +
+      scale_y_reverse() +
+      scale_x_reverse() +
+      theme_classic() + labs(title = "VSA") + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5)) +
+                scale_color_manual(values = c("a" = "#1AAD77",
+                                        "æ" = "#1279B5",
+                                        "i" = "#FFBF00",
+                                        "u" = "#FD7853"))
+    VSAplot
+  
+  rm(VSA_coords)
+  
+## Hull ----
+
+### Plotting Hull
+      convexCoords <- Formants_PRAAT %>%
+        dplyr::select(F1_b, F2_b) %>%
+        as.matrix() %>%
+        grDevices::chull()
+      convex <- Formants_PRAAT %>%
+        slice(convexCoords)
+
+      hullPlot <- ggplot(aes(F2_b, F1_b),
+                         data = Formants_PRAAT) +
+        geom_point(shape = 21,
+                 alpha = formantAlpha,
+                 color = formantColor) +
+        geom_polygon(data = convex,
+                     alpha = .5,
+                     color = "#1279B5",
+                     fill = NA,
+                     size = 1.5) +
+        scale_y_reverse() +
+        scale_x_reverse() +
+        theme_classic() + labs(title = "VSA Hull") + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme(plot.title = element_text(hjust = 0.5))
+      hullPlot
+    
+  
+## Vowel Space Density ----
+
+## Bark Normalized Density ----
+# selecting the bandwidth
+H_hpi <- Hpi(x = Formants_PRAAT[,c("F2_b","F1_b")], pilot = "samse", pre = "scale", binned = T)
+
+# compute 2d kde
+k <- kde(x = Formants_PRAAT[,c("F2_b","F1_b")],
+         H = H_hpi,
+         binned = T,
+         gridsize = 250)
+
+#density <- k[["estimate"]]
+
+# Before we can plot the density estimate we need to melt it into long format
+mat.melted <- melt(k$estimate)
+names(mat.melted) <- c("x", "y", "density")
+
+# We need to add two more colums to preserve the axes units
+mat.melted$F2.b <- rep(k$eval.points[[1]], times = nrow(k$estimate))
+mat.melted$F1.b <- rep(k$eval.points[[2]], each = nrow(k$estimate))
+mat.melted$density <- scales::rescale(mat.melted$density, to = c(0, 1))
+
+# VSD - 25
+nVSD_25 <- mat.melted %>%
+  dplyr::filter(density > .25) %>%
+  dplyr::select(F2.b,F1.b)
+
+convexCoords <- nVSD_25 %>%
+  dplyr::select(F2.b, F1.b) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+nconvex_25 <- nVSD_25 %>%
+  slice(convexCoords)
+
+# VSD - 75
+nVSD_75 <- mat.melted %>%
+  dplyr::filter(density > .75) %>%
+  dplyr::select(F2.b,F1.b)
+
+convexCoords <- nVSD_75 %>%
+  dplyr::select(F2.b, F1.b) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+nconvex_75 <- nVSD_75 %>%
+  slice(convexCoords)
+
+# Plotting Z Normalized VSD 
+    rf <- colorRampPalette(rev(brewer.pal(11, "Spectral")))
+    r <- rf(32)
+
+    VSDplot <- ggplot(mat.melted %>%
+                        dplyr::rename(Density = density),
+                      aes(x = F2.b,
+                          y = F1.b,
+                          fill = Density)) + 
+      geom_tile() + 
+      #coord_equal() + 
+      scale_fill_gradientn(colours = r) +
+      scale_x_reverse(expand = c(0, 0), 
+                      breaks = round(seq(min(mat.melted$F2.b), 
+                                         max(mat.melted$F2.b)))) +
+      scale_y_reverse(expand = c(0, 0),
+                      breaks = round(seq(min(mat.melted$F1.b),
+                                         max(mat.melted$F1.b)))) + 
+      ylab("F1 (bark)") + xlab("F2 (bark)") +
+      labs(title = "VSD Hull") +
+      theme(plot.title = element_text(hjust = 0.5)) +
+      geom_polygon(data = nconvex_25, alpha = .5, color = "black", fill = NA) +
+      geom_polygon(data = nconvex_75, alpha = .5, color = "black", fill = NA)
+    VSDplot
+    
+
+
+# Combined Plot
+
+ggpubr::ggarrange(CDplot,VSAplot,hullPlot,VSDplot, ncol = 2, nrow = 2)
+dir.create("Data/Plots/Presentation Plots", showWarnings = F)
+ggsave("Data/Plots/Presentation Plots/Measures.png",
+       plot = last_plot(),
+       height = 7,
+       width = 9,
+       scale = .8)
+
+
+```
+
+# Filtering Process
+```{r}
+formantColor <- "black"
+formantAlpha <- .20
+filteredOut <- "red"
+
+Pitch_PRAAT <- list.files(path = paste("Data/Speaker Data/AF8", sep = ""), 
+                              pattern = ".Pitch", ignore.case = T) %>%
+    paste("Data/Speaker Data/AF8/",., sep = "") %>%
+    read.delim(., header = F) %>%
+    dplyr::rename(Pitch = V1) %>%
+    dplyr::mutate(Pitch = gsub("--undefined--",NA,Pitch),
+                  Pitch = as.numeric(Pitch))
+
+Formants_PRAAT <- list.files(path = paste("Data/Speaker Data/AF8", sep = ""), 
+                              pattern = "_Formant", ignore.case = T) %>%
+    paste("Data/Speaker Data/AF8/",., sep = "") %>%
+    read.delim(., header = T) %>%
+    dplyr::select(!c(nformants, B1.Hz., B2.Hz., B3.Hz., F4.Hz., B4.Hz., F5.Hz., B5.Hz.)) %>%
+    dplyr::rename(Time_s = time.s.,
+                  F1_Hz = F1.Hz.,
+                  F2_Hz = F2.Hz.,
+                  F3_Hz = F3.Hz.) %>%
+    dplyr::mutate(F1_Hz = ifelse(F1_Hz == 0, NA, F1_Hz),
+                  F2_Hz = ifelse(F2_Hz == 0, NA, F2_Hz),
+                  F3_Hz = ifelse(F3_Hz == 0, NA, F3_Hz)) %>%
+    dplyr::mutate(F1_Hz = as.numeric(F1_Hz),
+                  F2_Hz = as.numeric(F2_Hz),
+                  F3_Hz = suppressWarnings(as.numeric(F3_Hz)),
+                  Time_ms = Time_s / 1000,
+                  F1_kHz = F1_Hz / 1000,
+                  F2_kHz = F2_Hz / 1000,
+                  F3_kHz = F3_Hz / 1000,
+                  F1_b = emuR::bark(F1_Hz),
+                  F2_b = emuR::bark(F2_Hz),
+                  F3_b = emuR::bark(F3_Hz)) %>%
+    dplyr::select(!Time_s) %>%
+    dplyr::relocate(Time_ms, .before = F1_Hz) %>%
+    cbind(.,Pitch_PRAAT)
+  
+  c <- 2
+  while(c < NROW(Formants_PRAAT)){
+    Formants_PRAAT$F1_Hz[c] <- ifelse(is.na(Formants_PRAAT$F1_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F1_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F1_Hz[c])
+    Formants_PRAAT$F2_Hz[c] <- ifelse(is.na(Formants_PRAAT$F2_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F2_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F2_Hz[c])
+    c <- c + 1
+  }
+  rm(c)
+  
+  # Raw Formants ----
+  f1 <- ggplot(aes(x=F2_b,
+                           y=F1_b),
+                       data = Formants_PRAAT,
+                       inherit.aes = FALSE) + 
+      geom_point(shape = 21,
+                 #alpha = formantAlpha,
+                 color = formantColor) + 
+      scale_y_reverse() +
+      scale_x_reverse() +
+      theme_classic() + labs(title = paste("Raw Formant Values")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5))
+    f1
+    
+# Step #1: Voiced Segments ----
+    f2 <- ggplot(aes(x=F2_b,
+                           y=F1_b),
+                       data = Formants_PRAAT,
+                       inherit.aes = FALSE) + 
+      geom_point(shape = 21,
+                 #alpha = formantAlpha,
+                 color = filteredOut) + 
+      geom_point(data = Formants_PRAAT %>%
+                   dplyr::filter(!is.na(Pitch)),
+                 shape = 21,
+           #alpha = formantAlpha,
+           color = formantColor) + 
+      scale_y_reverse() +
+      scale_x_reverse() +
+      theme_classic() + labs(title = paste("Step #1: Voiced Segments")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5))
+    f2
+    
+# Step 2: MAD ----
+    f3 <- ggplot(aes(x=F2_b,
+                           y=F1_b),
+                       data = Formants_PRAAT %>%
+                              dplyr::filter(!is.na(Pitch)) %>%
+                              dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                                            F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5),
+                       inherit.aes = FALSE) + 
+      geom_point(shape = 21,
+                 #alpha = formantAlpha,
+                 color = filteredOut) + 
+      geom_point(data = Formants_PRAAT %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE),
+                 shape = 21,
+           #alpha = formantAlpha,
+           color = formantColor) + 
+      scale_y_reverse() +
+      scale_x_reverse() +
+      theme_classic() + labs(title = paste("Step #2: Median Absolute Deviation")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5))
+    f3
+    
+# Step 3: Mahalanhobis Distance ----
+    f4 <- ggplot(aes(x=F2_b,
+                           y=F1_b),
+                       data = Formants_PRAAT %>%
+                              dplyr::filter(!is.na(Pitch)) %>%
+                              dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                                            F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+                              dplyr::filter(F1_mad == FALSE & F2_mad == FALSE),
+                       inherit.aes = FALSE) + 
+      geom_point(shape = 21,
+                 #alpha = formantAlpha,
+                 color = filteredOut) + 
+      geom_point(data = Formants_PRAAT %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+    dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T))) %>%
+    #dplyr::mutate(mDistOutlier = (stats::pchisq(mDist, df=1, lower.tail=FALSE)) < .001) %>%
+    dplyr::filter(mDist_sd < 2),
+                 shape = 21,
+           #alpha = formantAlpha,
+           color = formantColor) + 
+      scale_y_reverse() +
+      scale_x_reverse() +
+      theme_classic() + labs(title = paste("Step #3: Mahalanobis Distance")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5))
+    f4
+    
+# Final Formants ----
+    f5 <- ggplot(aes(x=F2_b,
+                           y=F1_b),
+                       data = Formants_PRAAT %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+    dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T))) %>%
+    #dplyr::mutate(mDistOutlier = (stats::pchisq(mDist, df=1, lower.tail=FALSE)) < .001) %>%
+    dplyr::filter(mDist_sd < 2),
+                       inherit.aes = FALSE) + 
+      geom_point(shape = 21,
+                 #alpha = formantAlpha,
+                 color = formantColor) + 
+      scale_y_reverse() +
+      scale_x_reverse() +
+      theme_classic() + labs(title = paste("Final Formant Values")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5))
+    f5
+    
+# Comibing plots
+    ggpubr::ggarrange(f1, f2, f3, f4, f5, ncol = 3, nrow = 2)
+    ggsave("Data/Plots/Presentation Plots/Filtered Formants.png",
+           height = 6,
+           width = 8,
+           units = "in",
+           scale = 1.25)
+  
+```
+# Hull at different Filtering levels
+```{r}
+text_x <- 13
+text_y <- 8.5
+xlims <- c(16,5)
+ylims <- c(9,1)
+# Hull - 2 SD ----
+Pitch_PRAAT <- list.files(path = paste("Data/Speaker Data/AF8", sep = ""), 
+                              pattern = ".Pitch", ignore.case = T) %>%
+    paste("Data/Speaker Data/AF8/",., sep = "") %>%
+    read.delim(., header = F) %>%
+    dplyr::rename(Pitch = V1) %>%
+    dplyr::mutate(Pitch = gsub("--undefined--",NA,Pitch),
+                  Pitch = as.numeric(Pitch))
+
+Formants_PRAAT <- list.files(path = paste("Data/Speaker Data/AF8", sep = ""), 
+                              pattern = "_Formant", ignore.case = T) %>%
+    paste("Data/Speaker Data/AF8/",., sep = "") %>%
+    read.delim(., header = T) %>%
+    dplyr::select(!c(nformants, B1.Hz., B2.Hz., B3.Hz., F4.Hz., B4.Hz., F5.Hz., B5.Hz.)) %>%
+    dplyr::rename(Time_s = time.s.,
+                  F1_Hz = F1.Hz.,
+                  F2_Hz = F2.Hz.,
+                  F3_Hz = F3.Hz.) %>%
+    dplyr::mutate(F1_Hz = ifelse(F1_Hz == 0, NA, F1_Hz),
+                  F2_Hz = ifelse(F2_Hz == 0, NA, F2_Hz),
+                  F3_Hz = ifelse(F3_Hz == 0, NA, F3_Hz)) %>%
+    dplyr::mutate(F1_Hz = as.numeric(F1_Hz),
+                  F2_Hz = as.numeric(F2_Hz),
+                  F3_Hz = suppressWarnings(as.numeric(F3_Hz)),
+                  Time_ms = Time_s / 1000,
+                  F1_kHz = F1_Hz / 1000,
+                  F2_kHz = F2_Hz / 1000,
+                  F3_kHz = F3_Hz / 1000,
+                  F1_b = emuR::bark(F1_Hz),
+                  F2_b = emuR::bark(F2_Hz),
+                  F3_b = emuR::bark(F3_Hz)) %>%
+    dplyr::select(!Time_s) %>%
+    dplyr::relocate(Time_ms, .before = F1_Hz) %>%
+    cbind(.,Pitch_PRAAT) %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+    dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T))) %>%
+    #dplyr::mutate(mDistOutlier = (stats::pchisq(mDist, df=1, lower.tail=FALSE)) < .001) %>%
+    dplyr::filter(mDist_sd < 2)
+  
+  c <- 2
+  while(c < NROW(Formants_PRAAT)){
+    Formants_PRAAT$F1_Hz[c] <- ifelse(is.na(Formants_PRAAT$F1_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F1_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F1_Hz[c])
+    Formants_PRAAT$F2_Hz[c] <- ifelse(is.na(Formants_PRAAT$F2_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F2_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F2_Hz[c])
+    c <- c + 1
+  }
+  rm(c)
+  
+    Hull_b <- cHull(Formants_PRAAT$F1_b, Formants_PRAAT$F2_b)
+### Plotting Hull
+      convexCoords <- Formants_PRAAT %>%
+        dplyr::select(F1_b, F2_b) %>%
+        as.matrix() %>%
+        grDevices::chull()
+      convex <- Formants_PRAAT %>%
+        slice(convexCoords)
+
+      hullPlot_2 <- ggplot(aes(F2_b, F1_b),
+                         data = Formants_PRAAT) +
+        geom_point(shape = 21) +
+        geom_polygon(data = convex,
+                     alpha = .5,
+                     color = "#1279B5",
+                     fill = NA,
+                     size = 1.5) +
+        annotate("text", x = text_x, y = text_y, label = paste("Hull = ",round(Hull_b,3))) +
+        scale_y_reverse() +
+        scale_x_reverse() +
+        xlim(xlims) +
+        ylim(ylims) +
+        theme_classic() + labs(title = paste("VSA Hull - 2 SD")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme(plot.title = element_text(hjust = 0.5))
+      hullPlot_2
+      
+# Hull - 2.5 SD ----
+Pitch_PRAAT <- list.files(path = paste("Data/Speaker Data/AF8", sep = ""), 
+                              pattern = ".Pitch", ignore.case = T) %>%
+    paste("Data/Speaker Data/AF8/",., sep = "") %>%
+    read.delim(., header = F) %>%
+    dplyr::rename(Pitch = V1) %>%
+    dplyr::mutate(Pitch = gsub("--undefined--",NA,Pitch),
+                  Pitch = as.numeric(Pitch))
+
+Formants_PRAAT <- list.files(path = paste("Data/Speaker Data/AF8", sep = ""), 
+                              pattern = "_Formant", ignore.case = T) %>%
+    paste("Data/Speaker Data/AF8/",., sep = "") %>%
+    read.delim(., header = T) %>%
+    dplyr::select(!c(nformants, B1.Hz., B2.Hz., B3.Hz., F4.Hz., B4.Hz., F5.Hz., B5.Hz.)) %>%
+    dplyr::rename(Time_s = time.s.,
+                  F1_Hz = F1.Hz.,
+                  F2_Hz = F2.Hz.,
+                  F3_Hz = F3.Hz.) %>%
+    dplyr::mutate(F1_Hz = ifelse(F1_Hz == 0, NA, F1_Hz),
+                  F2_Hz = ifelse(F2_Hz == 0, NA, F2_Hz),
+                  F3_Hz = ifelse(F3_Hz == 0, NA, F3_Hz)) %>%
+    dplyr::mutate(F1_Hz = as.numeric(F1_Hz),
+                  F2_Hz = as.numeric(F2_Hz),
+                  F3_Hz = suppressWarnings(as.numeric(F3_Hz)),
+                  Time_ms = Time_s / 1000,
+                  F1_kHz = F1_Hz / 1000,
+                  F2_kHz = F2_Hz / 1000,
+                  F3_kHz = F3_Hz / 1000,
+                  F1_b = emuR::bark(F1_Hz),
+                  F2_b = emuR::bark(F2_Hz),
+                  F3_b = emuR::bark(F3_Hz)) %>%
+    dplyr::select(!Time_s) %>%
+    dplyr::relocate(Time_ms, .before = F1_Hz) %>%
+    cbind(.,Pitch_PRAAT) %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+    dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T))) %>%
+    #dplyr::mutate(mDistOutlier = (stats::pchisq(mDist, df=1, lower.tail=FALSE)) < .001) %>%
+    dplyr::filter(mDist_sd < 2.5)
+  
+  c <- 2
+  while(c < NROW(Formants_PRAAT)){
+    Formants_PRAAT$F1_Hz[c] <- ifelse(is.na(Formants_PRAAT$F1_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F1_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F1_Hz[c])
+    Formants_PRAAT$F2_Hz[c] <- ifelse(is.na(Formants_PRAAT$F2_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F2_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F2_Hz[c])
+    c <- c + 1
+  }
+  rm(c)
+  
+    Hull_b <- cHull(Formants_PRAAT$F1_b, Formants_PRAAT$F2_b)
+### Plotting Hull
+      convexCoords <- Formants_PRAAT %>%
+        dplyr::select(F1_b, F2_b) %>%
+        as.matrix() %>%
+        grDevices::chull()
+      convex <- Formants_PRAAT %>%
+        slice(convexCoords)
+
+      hullPlot_2.5 <- ggplot(aes(F2_b, F1_b),
+                         data = Formants_PRAAT) +
+        geom_point(shape = 21) +
+        geom_polygon(data = convex,
+                     alpha = .5,
+                     color = "#1279B5",
+                     fill = NA,
+                     size = 1.5) +
+        annotate("text", x = text_x, y = text_y, label = paste("Hull = ",round(Hull_b,3))) +
+        scale_y_reverse() +
+        scale_x_reverse() +
+        xlim(xlims) +
+        ylim(ylims) +
+        theme_classic() + labs(title = paste("VSA Hull - 2.5 SD")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme(plot.title = element_text(hjust = 0.5))
+      hullPlot_2.5
+      
+# Hull - 3 SD ----
+Pitch_PRAAT <- list.files(path = paste("Data/Speaker Data/AF8", sep = ""), 
+                              pattern = ".Pitch", ignore.case = T) %>%
+    paste("Data/Speaker Data/AF8/",., sep = "") %>%
+    read.delim(., header = F) %>%
+    dplyr::rename(Pitch = V1) %>%
+    dplyr::mutate(Pitch = gsub("--undefined--",NA,Pitch),
+                  Pitch = as.numeric(Pitch))
+
+Formants_PRAAT <- list.files(path = paste("Data/Speaker Data/AF8", sep = ""), 
+                              pattern = "_Formant", ignore.case = T) %>%
+    paste("Data/Speaker Data/AF8/",., sep = "") %>%
+    read.delim(., header = T) %>%
+    dplyr::select(!c(nformants, B1.Hz., B2.Hz., B3.Hz., F4.Hz., B4.Hz., F5.Hz., B5.Hz.)) %>%
+    dplyr::rename(Time_s = time.s.,
+                  F1_Hz = F1.Hz.,
+                  F2_Hz = F2.Hz.,
+                  F3_Hz = F3.Hz.) %>%
+    dplyr::mutate(F1_Hz = ifelse(F1_Hz == 0, NA, F1_Hz),
+                  F2_Hz = ifelse(F2_Hz == 0, NA, F2_Hz),
+                  F3_Hz = ifelse(F3_Hz == 0, NA, F3_Hz)) %>%
+    dplyr::mutate(F1_Hz = as.numeric(F1_Hz),
+                  F2_Hz = as.numeric(F2_Hz),
+                  F3_Hz = suppressWarnings(as.numeric(F3_Hz)),
+                  Time_ms = Time_s / 1000,
+                  F1_kHz = F1_Hz / 1000,
+                  F2_kHz = F2_Hz / 1000,
+                  F3_kHz = F3_Hz / 1000,
+                  F1_b = emuR::bark(F1_Hz),
+                  F2_b = emuR::bark(F2_Hz),
+                  F3_b = emuR::bark(F3_Hz)) %>%
+    dplyr::select(!Time_s) %>%
+    dplyr::relocate(Time_ms, .before = F1_Hz) %>%
+    cbind(.,Pitch_PRAAT) %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+    dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T))) %>%
+    #dplyr::mutate(mDistOutlier = (stats::pchisq(mDist, df=1, lower.tail=FALSE)) < .001) %>%
+    dplyr::filter(mDist_sd < 3)
+  
+  c <- 2
+  while(c < NROW(Formants_PRAAT)){
+    Formants_PRAAT$F1_Hz[c] <- ifelse(is.na(Formants_PRAAT$F1_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F1_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F1_Hz[c])
+    Formants_PRAAT$F2_Hz[c] <- ifelse(is.na(Formants_PRAAT$F2_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F2_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F2_Hz[c])
+    c <- c + 1
+  }
+  rm(c)
+  
+    Hull_b <- cHull(Formants_PRAAT$F1_b, Formants_PRAAT$F2_b)
+### Plotting Hull
+      convexCoords <- Formants_PRAAT %>%
+        dplyr::select(F1_b, F2_b) %>%
+        as.matrix() %>%
+        grDevices::chull()
+      convex <- Formants_PRAAT %>%
+        slice(convexCoords)
+
+      hullPlot_3 <- ggplot(aes(F2_b, F1_b),
+                         data = Formants_PRAAT) +
+        geom_point(shape = 21) +
+        geom_polygon(data = convex,
+                     alpha = .5,
+                     color = "#1279B5",
+                     fill = NA,
+                     size = 1.5) +
+        annotate("text", x = text_x, y = text_y, label = paste("Hull = ",round(Hull_b,3))) +
+        scale_y_reverse() +
+        scale_x_reverse() +
+        xlim(xlims) +
+        ylim(ylims) +
+        theme_classic() + labs(title = paste("VSA Hull - 3 SD")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme(plot.title = element_text(hjust = 0.5))
+      hullPlot_3
+      
+# Hull - 1.5 SD ----
+Pitch_PRAAT <- list.files(path = paste("Data/Speaker Data/AF8", sep = ""), 
+                              pattern = ".Pitch", ignore.case = T) %>%
+    paste("Data/Speaker Data/AF8/",., sep = "") %>%
+    read.delim(., header = F) %>%
+    dplyr::rename(Pitch = V1) %>%
+    dplyr::mutate(Pitch = gsub("--undefined--",NA,Pitch),
+                  Pitch = as.numeric(Pitch))
+
+Formants_PRAAT <- list.files(path = paste("Data/Speaker Data/AF8", sep = ""), 
+                              pattern = "_Formant", ignore.case = T) %>%
+    paste("Data/Speaker Data/AF8/",., sep = "") %>%
+    read.delim(., header = T) %>%
+    dplyr::select(!c(nformants, B1.Hz., B2.Hz., B3.Hz., F4.Hz., B4.Hz., F5.Hz., B5.Hz.)) %>%
+    dplyr::rename(Time_s = time.s.,
+                  F1_Hz = F1.Hz.,
+                  F2_Hz = F2.Hz.,
+                  F3_Hz = F3.Hz.) %>%
+    dplyr::mutate(F1_Hz = ifelse(F1_Hz == 0, NA, F1_Hz),
+                  F2_Hz = ifelse(F2_Hz == 0, NA, F2_Hz),
+                  F3_Hz = ifelse(F3_Hz == 0, NA, F3_Hz)) %>%
+    dplyr::mutate(F1_Hz = as.numeric(F1_Hz),
+                  F2_Hz = as.numeric(F2_Hz),
+                  F3_Hz = suppressWarnings(as.numeric(F3_Hz)),
+                  Time_ms = Time_s / 1000,
+                  F1_kHz = F1_Hz / 1000,
+                  F2_kHz = F2_Hz / 1000,
+                  F3_kHz = F3_Hz / 1000,
+                  F1_b = emuR::bark(F1_Hz),
+                  F2_b = emuR::bark(F2_Hz),
+                  F3_b = emuR::bark(F3_Hz)) %>%
+    dplyr::select(!Time_s) %>%
+    dplyr::relocate(Time_ms, .before = F1_Hz) %>%
+    cbind(.,Pitch_PRAAT) %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+    dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T))) %>%
+    #dplyr::mutate(mDistOutlier = (stats::pchisq(mDist, df=1, lower.tail=FALSE)) < .001) %>%
+    dplyr::filter(mDist_sd < 1.5)
+  
+  c <- 2
+  while(c < NROW(Formants_PRAAT)){
+    Formants_PRAAT$F1_Hz[c] <- ifelse(is.na(Formants_PRAAT$F1_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F1_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F1_Hz[c])
+    Formants_PRAAT$F2_Hz[c] <- ifelse(is.na(Formants_PRAAT$F2_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F2_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F2_Hz[c])
+    c <- c + 1
+  }
+  rm(c)
+  
+    Hull_b <- cHull(Formants_PRAAT$F1_b, Formants_PRAAT$F2_b)
+### Plotting Hull
+      convexCoords <- Formants_PRAAT %>%
+        dplyr::select(F1_b, F2_b) %>%
+        as.matrix() %>%
+        grDevices::chull()
+      convex <- Formants_PRAAT %>%
+        slice(convexCoords)
+
+      hullPlot_1.5 <- ggplot(aes(F2_b, F1_b),
+                         data = Formants_PRAAT) +
+        geom_point(shape = 21) +
+        geom_polygon(data = convex,
+                     alpha = .5,
+                     color = "#1279B5",
+                     fill = NA,
+                     size = 1.5) +
+        annotate("text", x = text_x, y = text_y, label = paste("Hull = ",round(Hull_b,3))) +
+        scale_y_reverse() +
+        scale_x_reverse() +
+        xlim(xlims) +
+        ylim(ylims) +
+        theme_classic() + labs(title = paste("VSA Hull - 1.5 SD")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme(plot.title = element_text(hjust = 0.5))
+      hullPlot_1.5
+      
+# Combined ----
+      ggpubr::ggarrange(hullPlot_1.5, hullPlot_2, hullPlot_2.5, hullPlot_3,
+                        ncol = 4)
+      ggsave(filename = "Data/Plots/Presentation Plots/Hull at different filters.png",
+             height = 3,
+             width= 9,
+             units = "in",
+             scale = 1.25)
+      
+```
+
