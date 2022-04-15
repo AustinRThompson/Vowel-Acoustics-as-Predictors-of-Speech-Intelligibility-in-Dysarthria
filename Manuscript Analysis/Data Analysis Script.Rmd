@@ -1074,10 +1074,16 @@ gtData %>%
   gtsave("DescriptivesTable.html", path = "Tables")
 
 ```
+```{r}
+sjPlot::tab_model(OT_Model_final, VAS_Model_final,
+                  show.se = T,
+                  string.se = "SE",
+                  file = "Tables/Model Table.html")
+```
 
 
 # Manuscript Figures
-
+## 
 ```{r}
 plotData_Int <- AcousticData %>%
   dplyr::filter(!grepl("_rel", Speaker)) %>%
@@ -1128,9 +1134,11 @@ scatter <- ggplot(plotData_Int,
   #geom_smooth(method = "lm") +
   geom_abline(intercept = 0, slope = 1) +
   coord_cartesian(xlim = c(0,100), ylim = c(0,100)) +
-  theme_classic()
+  theme_classic() +
+  theme(aspect.ratio=1)
 scatter
 ```
+## Model Scatterplot
 ```{r}
 modelFigureData <- AcousticData %>%
   dplyr::filter(!grepl("_rel",Speaker)) %>%
@@ -1139,15 +1147,23 @@ modelFigureData <- AcousticData %>%
                 Etiology = as.factor(Etiology),
                 Sex = as.factor(Sex)) %>%
   tidyr::pivot_longer(cols = VAS:transAcc, names_to = "IntType", values_to = "Int") %>%
-  dplyr::mutate(IntType = as.factor(IntType))
+  dplyr::mutate(IntType = case_when(
+    IntType == "transAcc" ~ "OT",
+    TRUE ~ "VAS"
+  ),
+                IntType = as.factor(IntType))
 
 ylabel <- "Intelligibility"
+myPal <- c("#2D2D37", "#1279B5")
+myPalShape <- c(19, 1)
 
 VSA <- modelFigureData %>%
   ggplot() +
   aes(x = VSA_b,
       y = Int,
-      color = IntType) +
+      color = IntType,
+      shape = IntType,
+      linetype = IntType) +
   geom_point() +
   geom_smooth(method = "lm", se = T, fill = "light grey") +
   xlab(expression("VSA (Bark"^2*")")) +
@@ -1155,59 +1171,92 @@ VSA <- modelFigureData %>%
   coord_cartesian(ylim = c(0,100)) +
   theme_classic() +
   theme(plot.title = element_text(hjust = 0.5, face = "bold"),
-        aspect.ratio=1)
+        aspect.ratio=1) +
+  scale_color_manual(values = myPal) +
+  scale_shape_manual(values = myPalShape) +
+  labs(color="Intelligibility Type",
+       shape = "Intelligibility Type",
+       linetype = "Intelligibility Type")
 
 disp <- modelFigureData %>%
   ggplot() +
   aes(x = vowel_ED_b,
       y = Int,
-      color = IntType) +
+      color = IntType,
+      shape = IntType,
+      linetype = IntType) +
   geom_point() +
   geom_smooth(method = "lm", se = T, fill = "light grey") +
   xlab("Corner Dispersion (Bark)") +
   ylab(ylabel) +
   coord_cartesian(ylim = c(0,100)) +
   theme_classic() +
-  theme(aspect.ratio=1)
+  theme(aspect.ratio=1) +
+  scale_color_manual(values = myPal) +
+  scale_shape_manual(values = myPalShape) +
+  labs(color="Intelligibility Type",
+       shape = "Intelligibility Type",
+       linetype = "Intelligibility Type")
 
 Hull <- modelFigureData %>%
   ggplot() +
   aes(x = Hull_b,
       y = Int,
-      color = IntType) +
+      color = IntType,
+      shape = IntType,
+      linetype = IntType) +
   geom_point() +
   geom_smooth(method = "lm", se = T, fill = "light grey") +
   xlab(expression("VSA"[Hull]*" (Bark"^2*")")) +
   ylab(ylabel) +
   coord_cartesian(ylim = c(0,100)) +
   theme_classic() +
-  theme(aspect.ratio=1) + theme(legend.position = "none")
+  theme(aspect.ratio=1) + theme(legend.position = "none") +
+  scale_color_manual(values = myPal) +
+  scale_shape_manual(values = myPalShape) +
+  labs(color="Intelligibility Type",
+       shape = "Intelligibility Type",
+       linetype = "Intelligibility Type")
 
 vsd25 <- modelFigureData %>%
   ggplot() +
   aes(x = Hull_bVSD_25,
       y = Int,
-      color = IntType) +
+      color = IntType,
+      shape = IntType,
+      linetype = IntType) +
   geom_point() +
   geom_smooth(method = "lm", se = T, fill = "light grey") +
   xlab(expression("VSD"[25]*" (Bark"^2*")")) +
   ylab(ylabel) +
   coord_cartesian(ylim = c(0,100)) +
   theme_classic() +
-  theme(aspect.ratio=1) + theme(legend.position = "none")
+  theme(aspect.ratio=1) + theme(legend.position = "none") +
+  scale_color_manual(values = myPal) +
+  scale_shape_manual(values = myPalShape) +
+  labs(color="Intelligibility Type",
+       shape = "Intelligibility Type",
+       linetype = "Intelligibility Type")
 
 vsd75 <- modelFigureData %>%
   ggplot() +
   aes(x = Hull_bVSD_75,
       y = Int,
-      color = IntType) +
+      color = IntType,
+      shape = IntType,
+      linetype = IntType) +
   geom_point() +
   geom_smooth(method = "lm", se = T, fill = "light grey") +
   xlab(expression("VSD"[75]*" (Bark"^2*")")) +
   ylab(ylabel) +
   coord_cartesian(ylim = c(0,100)) +
   theme_classic() +
-  theme(aspect.ratio=1) + theme(legend.position = "none")
+  theme(aspect.ratio=1) + theme(legend.position = "none") +
+  scale_color_manual(values = myPal) +
+  scale_shape_manual(values = myPalShape) +
+  labs(color="Intelligibility Type",
+       shape = "Intelligibility Type",
+       linetype = "Intelligibility Type")
 
 # Creating OT Scatterplot Figure
 
@@ -1216,6 +1265,11 @@ scatter <- VSA + disp + patchwork::guide_area() + Hull + vsd25 + vsd75 +
                          ncol = 3)
 scatter 
 
+ggsave("Plots/ModelFigure.png", scatter,
+       height = 4,
+       width = 6,
+       units = "in",
+       scale = 1.1)
 ```
 
 # Alternate Analysis
