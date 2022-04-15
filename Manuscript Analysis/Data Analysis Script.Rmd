@@ -19,6 +19,7 @@ library(corrr)
 library(ggridges)
 library(furniture)
 library(gt)
+library(patchwork)
 
 ```
 
@@ -27,7 +28,8 @@ library(gt)
 ```{r}
 
 Reliability <- rio::import("Prepped Data/Reliability Data.csv")
-AcousticData <- rio::import("Prepped Data/AcousticMeasures.csv") 
+AcousticData <- rio::import("Prepped Data/AcousticMeasures.csv") %>%
+  dplyr::mutate(intDiff = VAS - transAcc)
 
 AcousticData <- AcousticData %>%
   dplyr::filter(!grepl("_rel", Speaker)) %>%
@@ -330,7 +332,8 @@ OT_VSA <- AcousticData %>%
   ylab("Percent Words Correct") +
   coord_cartesian(ylim = c(0,100)) +
   theme_classic() +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        aspect.ratio=1)
 
 OT_disp <- AcousticData %>%
   ggplot() +
@@ -341,7 +344,8 @@ OT_disp <- AcousticData %>%
   xlab("Corner Dispersion (Bark)") +
   ylab("Percent Words Correct") +
   coord_cartesian(ylim = c(0,100)) +
-  theme_classic()
+  theme_classic() +
+  theme(aspect.ratio=1)
 
 OT_Hull <- AcousticData %>%
   ggplot() +
@@ -352,7 +356,8 @@ OT_Hull <- AcousticData %>%
   xlab(expression("Vowel Space Hull (Bark"^2*")")) +
   ylab("Percent Words Correct") +
   coord_cartesian(ylim = c(0,100)) +
-  theme_classic()
+  theme_classic() +
+  theme(aspect.ratio=1)
 
 OT_vsd25 <- AcousticData %>%
   ggplot() +
@@ -363,7 +368,8 @@ OT_vsd25 <- AcousticData %>%
   xlab(expression("Vowel Space Density"[25]*" (Bark"^2*")")) +
   ylab("Percent Words Correct") +
   coord_cartesian(ylim = c(0,100)) +
-  theme_classic()
+  theme_classic() +
+  theme(aspect.ratio=1)
 
 OT_vsd75 <- AcousticData %>%
   ggplot() +
@@ -374,15 +380,16 @@ OT_vsd75 <- AcousticData %>%
   xlab(expression("Vowel Space Density"[75]*" (Bark"^2*")")) +
   ylab("Percent Words Correct") +
   coord_cartesian(ylim = c(0,100)) +
-  theme_classic()
+  theme_classic() +
+  theme(aspect.ratio=1)
 
 # Creating OT Scatterplot Figure
 
-OT_Scatterplots <- ggpubr::ggarrange(OT_VSA, OT_disp, OT_Hull, OT_vsd25, OT_vsd75,
+OT_Scatterplots <- ggpubr::ggarrange(OT_VSA, OT_disp, NULL, OT_Hull, OT_vsd25, OT_vsd75,
                                      ncol = 3, nrow = 2)
 
 ## Saving OT Scatterplot Figure
-
+dir.create("Plots", showWarnings = F)
 ggsave("Plots/OT_Scatterplots.png", plot = last_plot(), width = 15, height = 15, unit = "in", scale = 0.6)
 
 # VAS Scatterplots
@@ -990,7 +997,6 @@ summary(OT_VAS_final)
 # Manuscript Tables
 Descriptives Table
 ```{r}
-# Etiology Spanners ----
 gtData <- AcousticData %>%
   rbind(.,AcousticData %>%
           dplyr::mutate(Etiology = "All Etiologies")) %>%
@@ -1066,6 +1072,149 @@ gtData %>%
      Ataxic_sd = "SD"
   ) %>%
   gtsave("DescriptivesTable.html", path = "Tables")
+
+```
+
+
+# Manuscript Figures
+
+```{r}
+plotData_Int <- AcousticData %>%
+  dplyr::filter(!grepl("_rel", Speaker)) %>%
+  dplyr::group_by(Speaker) %>%
+  dplyr::mutate(segMin = base::min(VAS, transAcc),
+                segMax = base::max(VAS, transAcc),
+                ratingAvg = mean(VAS, transAcc, na.rm = T),
+                Speaker = as.factor(Speaker),
+                Etiology = as.factor(Etiology)) %>%
+  arrange(segMax)
+
+my_pal <- c("#f26430", "#272D2D","#256eff")
+# With a bit more style
+plot_Int <- ggplot(plotData_Int) +
+  geom_segment(aes(x = fct_inorder(Speaker),
+                   xend = Speaker,
+                   y = segMin,
+                   yend = segMax,
+                   color = Etiology)) +
+  geom_point(aes(x = Speaker,
+                 y = VAS,
+                 color = Etiology),
+             #color = my_pal[1],
+             size = 3,
+             shape = 19) +
+  geom_point(aes(x = Speaker,
+                 y = transAcc,
+                 color = Etiology),
+             #color = my_pal[2],
+             size = 3,
+             shape = 15) +
+  coord_flip()+
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    panel.border = element_blank(),
+  ) +
+  xlab("") +
+  ylab("Speech Intelligibility") +
+  ggtitle("Speech Intelligibility") +
+  ylim(c(0,100))
+plot_Int
+
+scatter <- ggplot(plotData_Int,
+                  aes(x = transAcc,
+                 y = VAS)) +
+  geom_point(aes(color = Etiology)) +
+  #geom_smooth(method = "lm") +
+  geom_abline(intercept = 0, slope = 1) +
+  coord_cartesian(xlim = c(0,100), ylim = c(0,100)) +
+  theme_classic()
+scatter
+```
+```{r}
+modelFigureData <- AcousticData %>%
+  dplyr::filter(!grepl("_rel",Speaker)) %>%
+  dplyr::select(Speaker, Etiology, Sex, VSA_b, vowel_ED_b, Hull_b, Hull_bVSD_25, Hull_bVSD_75, VAS, transAcc) %>%
+  dplyr::mutate(Speaker = as.factor(Speaker),
+                Etiology = as.factor(Etiology),
+                Sex = as.factor(Sex)) %>%
+  tidyr::pivot_longer(cols = VAS:transAcc, names_to = "IntType", values_to = "Int") %>%
+  dplyr::mutate(IntType = as.factor(IntType))
+
+ylabel <- "Intelligibility"
+
+VSA <- modelFigureData %>%
+  ggplot() +
+  aes(x = VSA_b,
+      y = Int,
+      color = IntType) +
+  geom_point() +
+  geom_smooth(method = "lm", se = T, fill = "light grey") +
+  xlab(expression("VSA (Bark"^2*")")) +
+  ylab(ylabel) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        aspect.ratio=1)
+
+disp <- modelFigureData %>%
+  ggplot() +
+  aes(x = vowel_ED_b,
+      y = Int,
+      color = IntType) +
+  geom_point() +
+  geom_smooth(method = "lm", se = T, fill = "light grey") +
+  xlab("Corner Dispersion (Bark)") +
+  ylab(ylabel) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic() +
+  theme(aspect.ratio=1)
+
+Hull <- modelFigureData %>%
+  ggplot() +
+  aes(x = Hull_b,
+      y = Int,
+      color = IntType) +
+  geom_point() +
+  geom_smooth(method = "lm", se = T, fill = "light grey") +
+  xlab(expression("VSA"[Hull]*" (Bark"^2*")")) +
+  ylab(ylabel) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic() +
+  theme(aspect.ratio=1) + theme(legend.position = "none")
+
+vsd25 <- modelFigureData %>%
+  ggplot() +
+  aes(x = Hull_bVSD_25,
+      y = Int,
+      color = IntType) +
+  geom_point() +
+  geom_smooth(method = "lm", se = T, fill = "light grey") +
+  xlab(expression("VSD"[25]*" (Bark"^2*")")) +
+  ylab(ylabel) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic() +
+  theme(aspect.ratio=1) + theme(legend.position = "none")
+
+vsd75 <- modelFigureData %>%
+  ggplot() +
+  aes(x = Hull_bVSD_75,
+      y = Int,
+      color = IntType) +
+  geom_point() +
+  geom_smooth(method = "lm", se = T, fill = "light grey") +
+  xlab(expression("VSD"[75]*" (Bark"^2*")")) +
+  ylab(ylabel) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic() +
+  theme(aspect.ratio=1) + theme(legend.position = "none")
+
+# Creating OT Scatterplot Figure
+
+scatter <- VSA + disp + patchwork::guide_area() + Hull + vsd25 + vsd75 +
+  patchwork::plot_layout(guides = 'collect',
+                         ncol = 3)
+scatter 
 
 ```
 
