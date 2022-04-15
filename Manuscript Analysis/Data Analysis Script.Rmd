@@ -18,6 +18,7 @@ library(ggpubr)
 library(corrr)
 library(ggridges)
 library(furniture)
+library(gt)
 
 ```
 
@@ -983,6 +984,88 @@ OT_VAS_final <- lm(transAcc ~ VAS, data = AcousticData)
 # Model Results
 
 summary(OT_VAS_final)
+
+```
+
+# Manuscript Tables
+Descriptives Table
+```{r}
+# Etiology Spanners ----
+gtData <- AcousticData %>%
+  rbind(.,AcousticData %>%
+          dplyr::mutate(Etiology = "All Etiologies")) %>%
+  rbind(.,AcousticData %>%
+          rbind(.,AcousticData %>%
+          dplyr::mutate(Etiology = "All Etiologies")) %>%
+          dplyr::mutate(Sex = "All")) %>%
+  dplyr::mutate(Sex = as.factor(Sex),
+                Etiology = as.factor(Etiology)) %>%
+  dplyr::group_by(Sex, Etiology) %>%
+  dplyr::summarize(VSA_mean = mean(VSA_b, na.rm =T), VSA_sd = sd(VSA_b, na.rm = T),
+                   Disp_mean = mean(vowel_ED_b, na.rm =T), Disp_sd = sd(vowel_ED_b, na.rm =T),
+                   Hull_mean = mean(Hull_b, na.rm =T), Hull_sd = sd(Hull_b, na.rm =T),
+                   VSD25_mean = mean(Hull_bVSD_25, na.rm =T), VSD25_sd = sd(Hull_bVSD_25, na.rm =T),
+                   VSD50_mean = mean(Hull_bVSD_50, na.rm =T), VSD50_sd = sd(Hull_bVSD_50, na.rm =T),
+                   VSD75_mean = mean(Hull_bVSD_75, na.rm =T), VSD75_sd = sd(Hull_bVSD_75, na.rm =T),
+                   VAS_mean = mean(VAS, na.rm =T), VAS_sd = sd(VAS, na.rm =T),
+                   OT_mean = mean(transAcc, na.rm =T), OT_sd = sd(transAcc, na.rm =T)) %>%
+  pivot_longer(cols = VSA_mean:OT_sd, names_to = "Measure",
+               values_to = "Value") %>%
+  dplyr::mutate(meanSD = ifelse(grepl("_mean",Measure),"M","sd"),
+                Measure = gsub("_mean","",Measure),
+                Measure = gsub("_sd","",Measure),
+                Etiology = paste(Etiology,meanSD, sep = "_"),
+                Sex = case_when(
+                  Sex == "All" ~ "All Speakers",
+                  Sex == "M" ~ "Male",
+                  Sex == "F" ~ "Female"
+                )) %>%
+  dplyr::select(!meanSD) %>%
+  pivot_wider(names_from = Etiology, values_from = "Value") %>%
+  dplyr::filter(Measure != "VSD50")
+
+gtData %>%
+  gt::gt(
+    rowname_col = "Measure",
+    groupname_col = "Sex",
+  ) %>%
+  fmt_number(
+    columns = 'All Etiologies_M':PD_sd,
+    decimals = 2
+  ) %>%
+  tab_spanner(
+    label = "All Etiologies",
+    columns = c('All Etiologies_M', 'All Etiologies_sd')
+  ) %>%
+    tab_spanner(
+    label = "ALS",
+    columns = c(ALS_M, ALS_sd)
+  ) %>%
+  tab_spanner(
+    label = "PD",
+    columns = c(PD_M, PD_sd)
+  ) %>%
+  tab_spanner(
+    label = "HD",
+    columns = c(HD_M, HD_sd)
+  ) %>%
+  tab_spanner(
+    label = "Ataxic",
+    columns = c(Ataxic_M, Ataxic_sd)
+  ) %>%
+  cols_label(
+     'All Etiologies_M' = "M",
+     'All Etiologies_sd' = "SD",
+     ALS_M = "M",
+     ALS_sd = "SD",
+     PD_M = "M",
+     PD_sd = "SD",
+     HD_M = "M",
+     HD_sd = "SD",
+     Ataxic_M = "M",
+     Ataxic_sd = "SD"
+  ) %>%
+  gtsave("DescriptivesTable.html", path = "Tables")
 
 ```
 
