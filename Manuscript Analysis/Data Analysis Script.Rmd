@@ -1,9 +1,9 @@
 ---
-title: "Motor Speech Conference"
+title: "Vowel Acoustics as Predictors of Speech Intelligibility in Dysarthria"
 output: html_notebook
 ---
 
-This is the code for the statistical analysis for Motor Speech Conference 2022.
+This is the code for the statistical analysis for "Vowel Acoustics as Predictors of Speech Intelligibility in Dysarthria."
 
 # Loading Packages
 
@@ -20,6 +20,9 @@ library(ggridges)
 library(furniture)
 library(gt)
 library(patchwork)
+library(ks)
+# remotes::install_github("AllanCameron/geomtextpath")
+library(geomtextpath)
 
 ```
 
@@ -1083,7 +1086,553 @@ sjPlot::tab_model(OT_Model_final, VAS_Model_final,
 
 
 # Manuscript Figures
-## 
+## Example Measures
+```{r}
+formantColor <- "grey"
+formantAlpha <- .95
+lineColor <- "white"
+lineAlpha <- .8
+
+vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
+  dplyr::filter(Speaker == "AF8")
+
+  Pitch_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""), 
+                              pattern = ".Pitch", ignore.case = T) %>%
+    paste("Prepped Data/Example Data/",., sep = "") %>%
+    read.delim(., header = F) %>%
+    dplyr::rename(Pitch = V1) %>%
+    dplyr::mutate(Pitch = gsub("--undefined--",NA,Pitch),
+                  Pitch = as.numeric(Pitch))
+  
+  Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""), 
+                              pattern = "_Formant", ignore.case = T) %>%
+    paste("Prepped Data/Example Data/",., sep = "") %>%
+    read.delim(., header = T) %>%
+    dplyr::select(!c(nformants, B1.Hz., B2.Hz., B3.Hz., F4.Hz., B4.Hz., F5.Hz., B5.Hz.)) %>%
+    dplyr::rename(Time_s = time.s.,
+                  F1_Hz = F1.Hz.,
+                  F2_Hz = F2.Hz.,
+                  F3_Hz = F3.Hz.) %>%
+    dplyr::mutate(F1_Hz = ifelse(F1_Hz == 0, NA, F1_Hz),
+                  F2_Hz = ifelse(F2_Hz == 0, NA, F2_Hz),
+                  F3_Hz = ifelse(F3_Hz == 0, NA, F3_Hz)) %>%
+    dplyr::mutate(F1_Hz = as.numeric(F1_Hz),
+                  F2_Hz = as.numeric(F2_Hz),
+                  F3_Hz = suppressWarnings(as.numeric(F3_Hz)),
+                  Time_ms = Time_s / 1000,
+                  F1_kHz = F1_Hz / 1000,
+                  F2_kHz = F2_Hz / 1000,
+                  F3_kHz = F3_Hz / 1000) %>%
+    dplyr::select(!Time_s) %>%
+    dplyr::relocate(Time_ms, .before = F1_Hz) %>%
+    cbind(.,Pitch_PRAAT)
+  
+  c <- 2
+  while(c < NROW(Formants_PRAAT)){
+    Formants_PRAAT$F1_Hz[c] <- ifelse(is.na(Formants_PRAAT$F1_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F1_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F1_Hz[c])
+    Formants_PRAAT$F2_Hz[c] <- ifelse(is.na(Formants_PRAAT$F2_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F2_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F2_Hz[c])
+    c <- c + 1
+  }
+  rm(c)
+  
+  Formants_PRAAT <- Formants_PRAAT %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+    dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T))) %>%
+    #dplyr::mutate(mDistOutlier = (stats::pchisq(mDist, df=1, lower.tail=FALSE)) < .001) %>%
+    dplyr::filter(mDist_sd < 2) %>%
+    dplyr::select(!c(F1_mad, F2_mad, mDist, mDist_sd)) %>%
+    dplyr::mutate(F1_z = scale(F1_Hz, center = TRUE),
+                  F2_z = scale(F2_Hz, center = TRUE),
+                  F3_z = scale(F3_Hz, center = TRUE),
+                  F1_b = emuR::bark(F1_Hz),
+                  F2_b = emuR::bark(F2_Hz),
+                  F3_b = emuR::bark(F3_Hz))
+  
+  rm(Pitch_PRAAT)
+  
+  
+## Corner Dispersion ----
+  wedge <- vowelData %>%
+    dplyr::group_by(Vowel) %>%
+    summarize(mean_F1 = mean(F1_tempMid),
+              mean_F2 = mean(F2_tempMid),
+              mean_F1_z = mean(F1_z_tempMid),
+              mean_F2_z = mean(F2_z_tempMid),
+              mean_F1_b = mean(F1_b_tempMid),
+              mean_F2_b = mean(F2_b_tempMid)) %>%
+    dplyr::filter(Vowel == "v")
+    
+  corner_dis <- vowelData %>%
+    dplyr::filter(Vowel != "v") %>%
+    dplyr::group_by(Vowel) %>%
+    summarize(mean_F1 = mean(F1_tempMid),
+              mean_F2 = mean(F2_tempMid),
+              mean_F1_z = mean(F1_z_tempMid),
+              mean_F2_z = mean(F2_z_tempMid),
+              mean_F1_b = mean(F1_b_tempMid),
+              mean_F2_b = mean(F2_b_tempMid)) %>%
+    dplyr::mutate(Vowel_ED = sqrt((mean_F1-wedge$mean_F1)^2 + (mean_F2-wedge$mean_F2)^2),
+                  Vowel_ED_z = sqrt((mean_F1_z-wedge$mean_F1_z)^2 + (mean_F2_z-wedge$mean_F2_z)^2),
+                  Vowel_ED_b = sqrt((mean_F1_b-wedge$mean_F1_b)^2 + (mean_F2_b-wedge$mean_F2_b)^2))
+
+    
+# Plot Corner Dispersion
+      # Changing to IPA symbols
+      corner_dis <- corner_dis %>%
+        dplyr::mutate(Vowel = case_when(
+          Vowel == "ae" ~ "æ",
+          TRUE ~ Vowel
+        ))
+      
+      wedge <- wedge %>%
+        dplyr::mutate(Vowel = case_when(
+          Vowel == "v" ~ "ʌ",
+          TRUE ~ Vowel
+        ))
+      
+      CDplot <- ggplot(aes(x=F2_b,
+                           y=F1_b),
+                       data = Formants_PRAAT,
+                       inherit.aes = FALSE) + 
+      geom_point(shape = 21,
+                 alpha = formantAlpha,
+                 color = formantColor) + 
+      geom_line(aes(x = mean_F2_b,
+                    y = mean_F1_b),
+                data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  dplyr::filter(Vowel == "i") %>%
+                  rbind(.,wedge),
+                color = lineColor,
+                size = 1.5,
+                alpha = lineAlpha) +
+      geom_line(aes(x = mean_F2_b,
+                    y = mean_F1_b),
+                data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  dplyr::filter(Vowel == "a") %>%
+                  rbind(.,wedge),
+                color = lineColor,
+                size = 1.5,
+                alpha = lineAlpha) +
+      geom_line(aes(x = mean_F2_b,
+                    y = mean_F1_b),
+                data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  dplyr::filter(Vowel == "æ") %>%
+                  rbind(.,wedge),
+                color = lineColor,
+                size = 1.5,
+                alpha = lineAlpha) +
+      geom_line(aes(x = mean_F2_b,
+                    y = mean_F1_b),
+                data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  dplyr::filter(Vowel == "u") %>%
+                  rbind(.,wedge),
+                color = lineColor,
+                size = 1.5,
+                alpha = lineAlpha) +
+      geom_point(aes(x = mean_F2_b,
+                     y = mean_F1_b,
+                     color = Vowel),
+                 data = corner_dis %>%
+                  dplyr::select(Vowel:mean_F2_b) %>%
+                  rbind(.,wedge),
+                 inherit.aes = FALSE,
+                 size = 5) +
+      scale_y_reverse() +
+      scale_x_reverse() +
+      theme_classic() + labs(title = paste("Corner Dispersion")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5),
+            aspect.ratio = 1) +
+          scale_color_manual(values = c("a" = "#1AAD77",
+                                        "æ" = "#1279B5",
+                                        "i" = "#FFBF00",
+                                        "u" = "#FD7853",
+                                        "ʌ" = "#BF3178"))
+    CDplot
+    
+      rm(corner_dis, wedge)
+      
+## Vowel Space Area ----
+  VSA_coords <- vowelData %>%
+    dplyr::filter(Vowel != "v") %>%
+    dplyr::group_by(Vowel) %>%
+    summarize(mean_F1 = mean(F1_tempMid),
+              mean_F2 = mean(F2_tempMid),
+              mean_F1_z = mean(F1_z_tempMid),
+              mean_F2_z = mean(F2_z_tempMid),
+              mean_F1_b = mean(F1_b_tempMid),
+              mean_F2_b = mean(F2_b_tempMid)) 
+  
+### Plotting VSA
+    VSA_coords <- VSA_coords %>%
+        dplyr::mutate(Vowel = case_when(
+          Vowel == "ae" ~ "æ",
+          TRUE ~ Vowel
+        ))
+    
+    VSAplot <- ggplot(aes(x = F2_b,
+                          y = F1_b),
+                      data = Formants_PRAAT,
+                      inherit.aes = FALSE) + 
+      geom_point(shape = 21,
+                 alpha = formantAlpha,
+                 color = formantColor) + 
+      geom_polygon(aes(x = mean_F2_b,
+                       y = mean_F1_b),
+                   data = VSA_coords,
+                   alpha = lineAlpha,
+                   color = lineColor,
+                   fill=NA,
+                   size = 1.5) +
+      geom_point(aes(x = mean_F2_b,
+                     y = mean_F1_b,
+                     color = Vowel),
+                 data = VSA_coords,
+                 inherit.aes = FALSE,
+                 size = 5) +
+      scale_y_reverse() +
+      scale_x_reverse() +
+      guides(color = FALSE) +
+      theme_classic() + labs(title = "VSA") + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5),
+            aspect.ratio = 1) +
+                scale_color_manual(values = c("a" = "#1AAD77",
+                                        "æ" = "#1279B5",
+                                        "i" = "#FFBF00",
+                                        "u" = "#FD7853"))
+    VSAplot
+  
+  rm(VSA_coords)
+  
+## Hull ----
+
+### Plotting Hull
+      convexCoords <- Formants_PRAAT %>%
+        dplyr::select(F1_b, F2_b) %>%
+        as.matrix() %>%
+        grDevices::chull()
+      convex <- Formants_PRAAT %>%
+        slice(convexCoords)
+
+      hullPlot <- ggplot(aes(F2_b, F1_b),
+                         data = Formants_PRAAT) +
+        geom_point(shape = 21,
+                 alpha = formantAlpha,
+                 color = formantColor) +
+        geom_polygon(data = convex,
+                     alpha = .5,
+                     color = "#1279B5",
+                     fill = NA,
+                     size = 1.5) +
+        scale_y_reverse() +
+        scale_x_reverse() +
+        theme_classic() + labs(title = "VSA Hull") + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5),
+            aspect.ratio = 1)
+      hullPlot
+    
+  
+## Vowel Space Density ----
+
+## Bark Normalized Density ----
+# selecting the bandwidth
+H_hpi <- ks::Hpi(x = Formants_PRAAT[,c("F2_b","F1_b")], pilot = "samse", pre = "scale", binned = T)
+
+# compute 2d kde
+k <- kde(x = Formants_PRAAT[,c("F2_b","F1_b")],
+         H = H_hpi,
+         binned = T,
+         gridsize = 250)
+
+#density <- k[["estimate"]]
+
+# Before we can plot the density estimate we need to melt it into long format
+mat.melted <- data.table::melt(k$estimate)
+names(mat.melted) <- c("x", "y", "density")
+
+# We need to add two more colums to preserve the axes units
+mat.melted$F2.b <- rep(k$eval.points[[1]], times = nrow(k$estimate))
+mat.melted$F1.b <- rep(k$eval.points[[2]], each = nrow(k$estimate))
+mat.melted$density <- scales::rescale(mat.melted$density, to = c(0, 1))
+
+# VSD - 25
+nVSD_25 <- mat.melted %>%
+  dplyr::filter(density > .25) %>%
+  dplyr::select(F2.b,F1.b)
+
+convexCoords <- nVSD_25 %>%
+  dplyr::select(F2.b, F1.b) %>%
+  as.matrix() %>%
+  #grDevices::xy.coords() %>%
+  grDevices::chull()
+nconvex_25 <- nVSD_25 %>%
+  slice(convexCoords)
+
+# VSD - 75
+nVSD_75 <- mat.melted %>%
+  dplyr::filter(density > .75) %>%
+  dplyr::select(F2.b,F1.b)
+
+convexCoords <- nVSD_75 %>%
+  dplyr::select(F2.b, F1.b) %>%
+  as.matrix() %>%
+  grDevices::chull()
+nconvex_75 <- nVSD_75 %>%
+  slice(convexCoords)
+
+# Plotting Z Normalized VSD 
+    rf <- colorRampPalette(rev(RColorBrewer::brewer.pal(11, "Spectral")))
+    r <- rf(32)
+
+    VSDplot <- ggplot(data = mat.melted %>%
+                        dplyr::rename(Density = density) %>%
+                        dplyr::mutate(VSDlabel = case_when(
+                          Density < .25 ~ "none",
+                          Density > .25 && Density < .75 ~ "VSD25",
+                          TRUE ~ "VSD75"
+                        )),
+                      aes(x = F2.b,
+                          y = F1.b,
+                          fill = Density)) + 
+      geom_tile() + 
+      scale_fill_gradientn(colours = r) +
+      scale_x_reverse(expand = c(0, 0), 
+                      breaks = round(seq(min(mat.melted$F2.b), 
+                                         max(mat.melted$F2.b)))) +
+      scale_y_reverse(expand = c(0, 0),
+                      breaks = round(seq(min(mat.melted$F1.b),
+                                         max(mat.melted$F1.b)))) + 
+      ylab("F1 (bark)") + xlab("F2 (bark)") +
+      labs(title = "VSD Hull") +
+      theme(plot.title = element_text(hjust = 0.5),
+            aspect.ratio = 1) +
+      geom_polygon(data = nconvex_25, alpha = lineAlpha, color = lineColor, size = 1.5, fill = NA) +
+      geom_polygon(data = nconvex_75, alpha = lineAlpha, color = lineColor, size = 1.5, fill = NA)
+    VSDplot
+    
+
+
+# Combined Plot
+
+measuresPlot <- VSAplot + CDplot + hullPlot + VSDplot +
+      patchwork::plot_layout(guides = 'collect',
+                             ncol = 2)
+
+ggsave(filename = "Plots/Measures.png",
+       plot = measuresPlot,
+       height = 7,
+       width = 8,
+       scale = .8)
+
+```
+
+## Filtering Process
+```{r}
+formantAlpha <- .20
+myPal <- c("#1279B5","#2D2D37")
+
+Pitch_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""), 
+                              pattern = ".Pitch", ignore.case = T) %>%
+    paste("Prepped Data/Example Data/",., sep = "") %>%
+    read.delim(., header = F) %>%
+    dplyr::rename(Pitch = V1) %>%
+    dplyr::mutate(Pitch = gsub("--undefined--",NA,Pitch),
+                  Pitch = as.numeric(Pitch))
+
+Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""), 
+                              pattern = "_Formant", ignore.case = T) %>%
+    paste("Prepped Data/Example Data/",., sep = "") %>%
+    read.delim(., header = T) %>%
+    dplyr::select(!c(nformants, B1.Hz., B2.Hz., B3.Hz., F4.Hz., B4.Hz., F5.Hz., B5.Hz.)) %>%
+    dplyr::rename(Time_s = time.s.,
+                  F1_Hz = F1.Hz.,
+                  F2_Hz = F2.Hz.,
+                  F3_Hz = F3.Hz.) %>%
+    dplyr::mutate(F1_Hz = ifelse(F1_Hz == 0, NA, F1_Hz),
+                  F2_Hz = ifelse(F2_Hz == 0, NA, F2_Hz),
+                  F3_Hz = ifelse(F3_Hz == 0, NA, F3_Hz)) %>%
+    dplyr::mutate(F1_Hz = as.numeric(F1_Hz),
+                  F2_Hz = as.numeric(F2_Hz),
+                  F3_Hz = suppressWarnings(as.numeric(F3_Hz)),
+                  Time_ms = Time_s / 1000,
+                  F1_kHz = F1_Hz / 1000,
+                  F2_kHz = F2_Hz / 1000,
+                  F3_kHz = F3_Hz / 1000,
+                  F1_b = emuR::bark(F1_Hz),
+                  F2_b = emuR::bark(F2_Hz),
+                  F3_b = emuR::bark(F3_Hz)) %>%
+    dplyr::select(!Time_s) %>%
+    dplyr::relocate(Time_ms, .before = F1_Hz) %>%
+    cbind(.,Pitch_PRAAT)
+  
+  c <- 2
+  while(c < NROW(Formants_PRAAT)){
+    Formants_PRAAT$F1_Hz[c] <- ifelse(is.na(Formants_PRAAT$F1_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F1_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F1_Hz[c])
+    Formants_PRAAT$F2_Hz[c] <- ifelse(is.na(Formants_PRAAT$F2_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F2_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F2_Hz[c])
+    c <- c + 1
+  }
+  rm(c)
+  
+  # Raw Formants ----
+  f1 <- ggplot(aes(x=F2_b,
+                   y=F1_b),
+               data = Formants_PRAAT) + 
+      geom_point(shape = 21, color = myPal[2]) +
+      scale_y_reverse() +
+      scale_x_reverse() +
+      scale_color_manual(values = myPal) +
+      theme_classic() + labs(title = paste("Raw Formant Values")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5),
+            aspect.ratio = 1,
+            legend.title = element_blank(),
+            legend.text = element_text(size=12))
+    
+# Step #1: Voiced Segments ----
+    plotData <- Formants_PRAAT %>%
+                   dplyr::mutate(isOutlier = case_when(
+                     is.na(Pitch) ~ "Removed",
+                     TRUE ~ "Retained"
+                   ))
+    f2 <- ggplot(data = plotData,
+                 aes(x = F2_b,
+                     y = F1_b,
+                     color = isOutlier)) + 
+      geom_point(shape = 21, data = plotData %>%
+                   dplyr::filter(isOutlier == "Removed")) +
+      geom_point(shape = 21, data = plotData %>%
+             dplyr::filter(isOutlier == "Retained")) +
+      scale_y_reverse() +
+      scale_x_reverse() +
+      scale_color_manual(values = myPal) +
+      theme_classic() + labs(title = paste("Step #1:\nVoiced Segments")) +
+      xlab("F2 (bark)") +
+      ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5),
+            aspect.ratio = 1,
+            legend.title = element_blank(),
+            legend.text = element_text(size=12))
+    
+# Step 2: MAD ----
+    plotData <- Formants_PRAAT %>%
+      dplyr::filter(!is.na(Pitch)) %>%
+      dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                    F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5,
+                    isOutlier = case_when(
+                      F1_mad == TRUE | F2_mad == TRUE ~ "Removed",
+                      TRUE ~ "Retained"
+               ))
+    
+    f3 <- ggplot(data = plotData,
+                 aes(x = F2_b,
+                     y = F1_b,
+                     color = isOutlier)) + 
+      geom_point(shape = 21, data = plotData %>%
+                   dplyr::filter(isOutlier == "Removed")) +
+      geom_point(shape = 21, data = plotData %>%
+             dplyr::filter(isOutlier == "Retained")) +
+      scale_y_reverse() +
+      scale_x_reverse() +
+      scale_color_manual(values = myPal) +
+      theme_classic() +
+      labs(title = paste("Step #2:\nMedian Absolute Deviation")) +
+      xlab("F2 (bark)") +
+      ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5),
+            aspect.ratio = 1,
+            legend.title = element_blank(),
+            legend.text = element_text(size=12))
+    
+# Step 3: Mahalanhobis Distance ----
+  plotData <- Formants_PRAAT %>%
+      dplyr::filter(!is.na(Pitch)) %>%
+      dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                    F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+      dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+      dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T)),
+                  isOutlier = case_when(
+                    mDist_sd < 2 ~ "Retained",
+                    TRUE ~ "Removed"
+                  ))
+    
+    f4 <- ggplot(data = plotData,
+                 aes(x = F2_b,
+                     y = F1_b,
+                     color = isOutlier)) + 
+      geom_point(shape = 21, data = plotData %>%
+                   dplyr::filter(isOutlier == "Removed")) +
+      geom_point(shape = 21, data = plotData %>%
+             dplyr::filter(isOutlier == "Retained")) +
+      scale_y_reverse() +
+      scale_x_reverse() +
+      scale_color_manual(values = myPal) +
+      theme_classic() + labs(title = paste("Step #3:\nMahalanobis Distance")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5),
+            aspect.ratio = 1,
+            legend.title = element_blank(),
+            legend.text = element_text(size=12))
+    
+# Final Formants ----
+    plotData <- Formants_PRAAT %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+    dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T))) %>%
+    dplyr::filter(mDist_sd < 2)
+    
+    f5 <- ggplot(aes(x=F2_b,
+                     y=F1_b),
+                       data = plotData,
+                       inherit.aes = FALSE) + 
+      geom_point(shape = 21, color = myPal[2]) + 
+      scale_y_reverse() +
+      scale_x_reverse() +
+      theme_classic() + labs(title = paste("Final Formant Values")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5),
+            aspect.ratio = 1, legend.title = element_blank())
+    
+# Comibing plots
+    filteredPlot <- f1 + f2 + f3 + f4 + f5 + patchwork::guide_area() +
+      patchwork::plot_layout(guides = 'collect',
+                         ncol = 3)
+    filteredPlot
+    
+    ggsave(plot = filteredPlot, "Plots/Filtered Formants.png",
+           height = 6,
+           width = 8,
+           units = "in",
+           scale = .9)
+  
+```
+
+## OT vs. VAS
 ```{r}
 plotData_Int <- AcousticData %>%
   dplyr::filter(!grepl("_rel", Speaker)) %>%
@@ -1139,6 +1688,7 @@ scatter <- ggplot(plotData_Int,
 scatter
 ```
 ## Model Scatterplot
+
 ```{r}
 modelFigureData <- AcousticData %>%
   dplyr::filter(!grepl("_rel",Speaker)) %>%
