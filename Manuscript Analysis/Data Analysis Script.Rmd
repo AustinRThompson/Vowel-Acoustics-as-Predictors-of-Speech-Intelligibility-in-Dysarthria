@@ -11,18 +11,18 @@ This is the code for the statistical analysis for "Vowel Acoustics as Predictors
 
 library(rio)
 library(tidyverse)
-library(irr)
+library(irr) # install.packages('irr')
 library(performance)
 library(car)
 library(ggpubr)
 library(corrr)
 library(ggridges)
-library(furniture)
+library(furniture) # install.packages('furniture')
 library(gt)
 library(patchwork)
 library(ks)
-# remotes::install_github("AllanCameron/geomtextpath")
-library(geomtextpath)
+library(emuR) # install.packages('emuR')
+library(geomtextpath) # remotes::install_github("AllanCameron/geomtextpath")
 
 ```
 
@@ -145,11 +145,15 @@ DescriptivesbyEtiology
 
 ```{r}
 
-CorrMatrix1 <- AcousticData %>%
+CorrMatrix <- AcousticData %>%
   dplyr::select(VSA_b, vowel_ED_b, Hull_b, Hull_bVSD_25, Hull_bVSD_50, Hull_bVSD_75, VAS, transAcc) %>%
-  corrr::correlate()
+  corrr::correlate() %>%
+  column_to_rownames(var = "term") %>%
+  mutate_if(is.numeric, round, digits = 2)
 
-CorrMatrix1
+CorrMatrix
+
+write.csv(CorrMatrix, file = "Tables/Correlation Matrix.csv")
 
 ```
 
@@ -835,6 +839,13 @@ performance::check_model(OT_Model_final)
 summary(OT_Model_final)
 
 ```
+### OT Table
+```{r}
+sjPlot::tab_model(OT_Model1,OT_Model2,OT_Model3, OT_Model4, OT_Model5, OT_Model_final,
+                  collapse.ci = TRUE,
+                  p.style = "stars",
+                  file = "Tables/OT Models.html")
+```
 
 
 ## VAS Models
@@ -963,6 +974,16 @@ performance::check_model(VAS_Model_final)
 summary(VAS_Model_final)
 
 ```
+
+### VAS Table
+```{r}
+sjPlot::tab_model(VAS_Model1,VAS_Model2,VAS_Model3, VAS_Model4, VAS_Model5, VAS_Model_final,
+                  collapse.ci = TRUE,
+                  p.style = "stars",
+                  file = "Tables/VAS Models.html")
+```
+
+
 ## Relationship between OT and VAS
 
 ### Tested Model
