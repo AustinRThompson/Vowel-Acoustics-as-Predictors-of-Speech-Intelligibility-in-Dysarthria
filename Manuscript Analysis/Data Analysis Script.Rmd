@@ -15,7 +15,7 @@ library(irr) # install.packages('irr')
 library(performance)
 library(car)
 library(ggpubr)
-library(corrr)
+library("Hmisc") # install.packages('Hmisc')
 library(ggridges)
 library(furniture) # install.packages('furniture')
 library(gt)
@@ -141,17 +141,18 @@ DescriptivesbyEtiology
 
 ```
 
-## Correlations among variables
+## Correlations
 
 ```{r}
-
 CorrMatrix <- AcousticData %>%
   dplyr::select(VSA_b, vowel_ED_b, Hull_b, Hull_bVSD_25, Hull_bVSD_50, Hull_bVSD_75, VAS, transAcc) %>%
-  corrr::correlate() %>%
-  column_to_rownames(var = "term") %>%
-  mutate_if(is.numeric, round, digits = 2)
+  as.matrix() %>%
+  Hmisc::rcorr()
 
 CorrMatrix
+
+stats::cor.test(AcousticData$VSA_b, AcousticData$vowel_ED_b, method = "pearson")
+stats::cor.test(AcousticData$Hull_b, AcousticData$Hull_bVSD_25, method = "pearson")
 
 write.csv(CorrMatrix, file = "Tables/Correlation Matrix.csv")
 
@@ -842,7 +843,7 @@ summary(OT_Model_final)
 ### OT Table
 ```{r}
 sjPlot::tab_model(OT_Model1,OT_Model2,OT_Model3, OT_Model4, OT_Model5, OT_Model_final,
-                  collapse.ci = TRUE,
+                  show.ci = F,
                   p.style = "stars",
                   file = "Tables/OT Models.html")
 ```
@@ -978,7 +979,7 @@ summary(VAS_Model_final)
 ### VAS Table
 ```{r}
 sjPlot::tab_model(VAS_Model1,VAS_Model2,VAS_Model3, VAS_Model4, VAS_Model5, VAS_Model_final,
-                  collapse.ci = TRUE,
+                  show.ci = F,
                   p.style = "stars",
                   file = "Tables/VAS Models.html")
 ```
