@@ -614,6 +614,14 @@ OT_VAS_final <- lm(transAcc ~ VAS, data = AcousticData)
 summary(OT_VAS_final)
 
 ```
+## OT vs. VAS Table
+```{r}
+sjPlot::tab_model(OT_VAS_model,OT_VAS_final,
+                  show.ci = F,
+                  show.reflvl = T,
+                  p.style = "stars",
+                  file = "Tables/OT and VAS Comparison Models.html")
+```
 
 # Manuscript Tables
 ##Descriptives Table
