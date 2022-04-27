@@ -36,7 +36,10 @@ AcousticData <- rio::import("Prepped Data/AcousticMeasures.csv") %>%
 
 AcousticData <- AcousticData %>%
   dplyr::filter(!grepl("_rel", Speaker)) %>%
-  dplyr::select(c(Speaker, Sex, Etiology, vowel_ED_b, VSA_b, Hull_b, Hull_bVSD_25, Hull_bVSD_50, Hull_bVSD_75, VAS, transAcc))
+  dplyr::select(c(Speaker, Sex, Etiology, vowel_ED_b, VSA_b, Hull_b, Hull_bVSD_25, Hull_bVSD_50, Hull_bVSD_75, VAS, transAcc)) %>%
+  dplyr::mutate(Etiology = as.factor(Etiology),
+                Sex = as.factor(Sex),
+                Speaker = as.factor(Speaker))
 
 Listeners <- rio::import("Prepped Data/Listener_Demographics.csv") %>%
   dplyr::select(!c(StartDate:proloficID, Q2.4_6_TEXT, Q3.2_8_TEXT, AudioCheck:EP3))
@@ -456,14 +459,6 @@ performance::check_model(OT_Model_final)
 summary(OT_Model_final)
 
 ```
-### OT Table
-```{r}
-sjPlot::tab_model(OT_Model1,OT_Model2,OT_Model3, OT_Model4, OT_Model5, OT_Model_final,
-                  show.ci = F,
-                  p.style = "stars",
-                  file = "Tables/OT Models.html")
-```
-
 
 ## VAS Models
 
@@ -587,15 +582,6 @@ summary(VAS_Model_final)
 
 ```
 
-### VAS Table
-```{r}
-sjPlot::tab_model(VAS_Model1,VAS_Model2,VAS_Model3, VAS_Model4, VAS_Model5, VAS_Model_final,
-                  show.ci = F,
-                  p.style = "stars",
-                  file = "Tables/VAS Models.html")
-```
-
-
 # Research Q2: Relationship between OT and VAS
 
 Model 1
@@ -615,7 +601,7 @@ summary(OT_VAS_model)
 
 ```
 
-### Final Model
+## Final Model
 
 ```{r}
 
@@ -630,7 +616,7 @@ summary(OT_VAS_final)
 ```
 
 # Manuscript Tables
-Descriptives Table
+##Descriptives Table
 ```{r}
 gtData <- AcousticData %>%
   rbind(.,AcousticData %>%
@@ -709,16 +695,34 @@ gtData %>%
   gtsave("DescriptivesTable.html", path = "Tables")
 
 ```
+
+## OT Model
 ```{r}
-sjPlot::tab_model(OT_Model_final, VAS_Model_final,
-                  show.se = T,
-                  string.se = "SE",
-                  file = "Tables/Model Table.html")
+sjPlot::tab_model(OT_Model1,OT_Model2,OT_Model3, OT_Model4, OT_Model5, OT_Model_final,
+                  show.ci = F,
+                  p.style = "stars",
+                  file = "Tables/OT Models.html")
 ```
 
+## VAS Model
+```{r}
+sjPlot::tab_model(VAS_Model1,VAS_Model2,VAS_Model3, VAS_Model4, VAS_Model5, VAS_Model_final,
+                  show.ci = F,
+                  p.style = "stars",
+                  file = "Tables/VAS Models.html")
+```
+
+## OT vs. VAS
+```{r}
+sjPlot::tab_model(OT_VAS_model,OT_VAS_final,
+                  show.ci = F,
+                  show.reflvl = TRUE,
+                  p.style = "stars",
+                  file = "Tables/OT and VAS Comparison.html")
+```
 
 # Manuscript Figures
-Example Measures
+## Example Measures
 ```{r}
 formantColor <- "grey"
 formantAlpha <- .95
@@ -1073,7 +1077,7 @@ ggsave(filename = "Plots/Measures.png",
 
 ```
 
-Filtering Process
+## Filtering Process
 ```{r}
 formantAlpha <- .20
 myPal <- c("#1279B5","#2D2D37")
@@ -1264,7 +1268,7 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
   
 ```
 
-OT vs. VAS
+## OT vs. VAS
 ```{r}
 plotData_Int <- AcousticData %>%
   dplyr::filter(!grepl("_rel", Speaker)) %>%
@@ -1308,19 +1312,58 @@ plot_Int <- ggplot(plotData_Int) +
   ylim(c(0,100))
 plot_Int
 
-scatter <- ggplot(plotData_Int,
-                  aes(x = transAcc,
-                      y = VAS,
+myPal <- c("#1AAD77", "#1279B5", "#FFBF00", "#FD7853", "#BF3178")
+myShapes <- c(16, 18, 17, 15)
+
+scatter1 <- ggplot(plotData_Int,
+                  aes(x = VAS,
+                      y = transAcc,
                       color = Etiology,
                       shape = Etiology,
                       linetype = Etiology)) +
   geom_point() +
+  #geom_smooth(method = "lm", se = F) +
+  geom_abline(intercept = 0, slope = 1) +
+  coord_cartesian(xlim = c(0,100), ylim = c(0,100)) +
+  labs(x = "Intelligibility (VAS)", y = "Intelligibility (OT)") +
+  scale_color_manual(values = myPal) +
+  scale_shape_manual(values = myShapes) +
+  theme_classic() +
+  theme(aspect.ratio=1,
+        legend.position="right")
+
+scatter2 <- ggplot(plotData_Int,
+                  aes(x = VAS,
+                      y = transAcc,
+                      color = Etiology,
+                      shape = Etiology,
+                      linetype = Etiology)) +
+  #geom_point() +
   geom_smooth(method = "lm", se = F) +
   geom_abline(intercept = 0, slope = 1) +
   coord_cartesian(xlim = c(0,100), ylim = c(0,100)) +
+  labs(x = "Intelligibility (VAS)", y = "Intelligibility (OT)") +
+  scale_color_manual(values = myPal) +
+  scale_shape_manual(values = myShapes) +
   theme_classic() +
-  theme(aspect.ratio=1)
-scatter
+  theme(aspect.ratio=1,
+        legend.position="right")
+
+combinedScatter <- ggarrange(scatter1,
+                             scatter2,
+                             common.legend = F,
+                             ncol = 2,
+                             nrow = 1)
+combinedScatter
+
+ggsave(filename = "Plots/OT and VAS Scatterplot.png",
+       plot = combinedScatter,
+       height = 2,
+       width = 6,
+       units = "in",
+       scale = 1)
+
+rm(scatter1, scatter2, combinedScatter)
 ```
 
 Model Scatterplot
