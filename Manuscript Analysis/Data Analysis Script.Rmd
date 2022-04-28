@@ -569,7 +569,6 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
                                       colMeans(cbind(.$F1_Hz, .$F2_Hz)),
                                       cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
                   mDist_sd = abs(scale(mDist,center = T))) %>%
-    #dplyr::mutate(mDistOutlier = (stats::pchisq(mDist, df=1, lower.tail=FALSE)) < .001) %>%
     dplyr::filter(mDist_sd < 2) %>%
     dplyr::select(!c(F1_mad, F2_mad, mDist, mDist_sd)) %>%
     dplyr::mutate(F1_z = scale(F1_Hz, center = TRUE),
@@ -585,7 +584,7 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
 ## Corner Dispersion ----
   wedge <- vowelData %>%
     dplyr::group_by(Vowel) %>%
-    summarize(mean_F1 = mean(F1_tempMid),
+    dplyr::summarize(mean_F1 = mean(F1_tempMid),
               mean_F2 = mean(F2_tempMid),
               mean_F1_z = mean(F1_z_tempMid),
               mean_F2_z = mean(F2_z_tempMid),
@@ -596,7 +595,7 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
   corner_dis <- vowelData %>%
     dplyr::filter(Vowel != "v") %>%
     dplyr::group_by(Vowel) %>%
-    summarize(mean_F1 = mean(F1_tempMid),
+    dplyr::summarize(mean_F1 = mean(F1_tempMid),
               mean_F2 = mean(F2_tempMid),
               mean_F1_z = mean(F1_z_tempMid),
               mean_F2_z = mean(F2_z_tempMid),
@@ -610,7 +609,7 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
 # Plot Corner Dispersion
       # Changing to IPA symbols
       corner_dis <- corner_dis %>%
-        dplyr::mutate(Vowel = case_when(
+        dplyr::mutate(Vowel = dplyr::case_when(
           Vowel == "ae" ~ "æ",
           TRUE ~ Vowel
         ))
@@ -690,7 +689,7 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
   VSA_coords <- vowelData %>%
     dplyr::filter(Vowel != "v") %>%
     dplyr::group_by(Vowel) %>%
-    summarize(mean_F1 = mean(F1_tempMid),
+    dplyr::summarize(mean_F1 = mean(F1_tempMid),
               mean_F2 = mean(F2_tempMid),
               mean_F1_z = mean(F1_z_tempMid),
               mean_F2_z = mean(F2_z_tempMid),
@@ -792,7 +791,8 @@ mat.melted$density <- scales::rescale(mat.melted$density, to = c(0, 1))
 # VSD - 25
 nVSD_25 <- mat.melted %>%
   dplyr::filter(density > .25) %>%
-  dplyr::select(F2.b,F1.b)
+  dplyr::select(F2.b,F1.b, density) %>%
+  dplyr::rename(Density = density)
 
 convexCoords <- nVSD_25 %>%
   dplyr::select(F2.b, F1.b) %>%
@@ -805,7 +805,8 @@ nconvex_25 <- nVSD_25 %>%
 # VSD - 75
 nVSD_75 <- mat.melted %>%
   dplyr::filter(density > .75) %>%
-  dplyr::select(F2.b,F1.b)
+  dplyr::select(F2.b,F1.b, density) %>%
+  dplyr::rename(Density = density)
 
 convexCoords <- nVSD_75 %>%
   dplyr::select(F2.b, F1.b) %>%
@@ -817,19 +818,22 @@ nconvex_75 <- nVSD_75 %>%
 # Plotting Z Normalized VSD 
     rf <- colorRampPalette(rev(RColorBrewer::brewer.pal(11, "Spectral")))
     r <- rf(32)
-
-    VSDplot <- ggplot(data = mat.melted %>%
+    
+    plotData <- mat.melted %>%
                         dplyr::rename(Density = density) %>%
-                        dplyr::mutate(VSDlabel = case_when(
+                        dplyr::mutate(VSDlabel = dplyr::case_when(
                           Density < .25 ~ "none",
                           Density > .25 && Density < .75 ~ "VSD25",
                           TRUE ~ "VSD75"
-                        )),
+                        ))
+
+    VSDplot <- ggplot(data = plotData,
                       aes(x = F2.b,
                           y = F1.b,
                           fill = Density)) + 
       geom_tile() + 
-      scale_fill_gradientn(colours = r) +
+      scale_fill_viridis_c() +
+      #scale_fill_gradientn(colours = r) +
       scale_x_reverse(expand = c(0, 0), 
                       breaks = round(seq(min(mat.melted$F2.b), 
                                          max(mat.melted$F2.b)))) +
@@ -841,10 +845,25 @@ nconvex_75 <- nVSD_75 %>%
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1) +
       geom_polygon(data = nconvex_25, alpha = lineAlpha, color = lineColor, size = 1.5, fill = NA) +
-      geom_polygon(data = nconvex_75, alpha = lineAlpha, color = lineColor, size = 1.5, fill = NA)
-    VSDplot
-    
-
+      geom_polygon(data = nconvex_75, alpha = lineAlpha, color = lineColor, size = 1.5, fill = NA) +
+      geom_textcurve(data = data.frame(x = 10.382452, xend = 8.313515, y = 2.874967, yend = 4.127919, Density = 1), 
+                 aes(x, y, xend = xend, yend = yend),
+                 hjust = 0.5,
+                 vjust = -.6,
+                 curvature = 0,
+                 label = "VSD 25",
+                 text_only = T,
+                 color = "white",
+                 rich = TRUE) +
+        geom_textcurve(data = data.frame(x = 14.92512, xend = 12.04660, y = 3.778258, yend = 5.759672, Density = 1), 
+                 aes(x, y, xend = xend, yend = yend),
+                 hjust = 0.3, 
+                 vjust = -.6,
+                 curvature = 0,
+                 label = "VSD 75",
+                 text_only = T,
+                 color = "white")
+     VSDplot
 
 # Combined Plot
 
