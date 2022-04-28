@@ -391,8 +391,187 @@ ggsave("Plots/Scatterplots_incoord.png", plot = last_plot(), width = 15, height 
 ```
 
 
-## Group Comparisons
+## Group Comparisons - 4 Groups
+### Means and SD
 
+```{r}
+
+AcousticData %>%
+  dplyr::group_by(Sex, Etiology) %>%
+  dplyr::summarize(VSA_mean = mean(VSA_b, na.rm =T), VSA_sd = sd(VSA_b, na.rm = T),
+                   Disp_mean = mean(vowel_ED_b, na.rm =T), Disp_sd = sd(vowel_ED_b, na.rm =T),
+                   Hull_mean = mean(Hull_b, na.rm =T), Hull_sd = sd(Hull_b, na.rm =T),
+                   VSD25_mean = mean(Hull_bVSD_25, na.rm =T), VSD25_sd = sd(Hull_bVSD_25, na.rm =T),
+                   VSD50_mean = mean(Hull_bVSD_50, na.rm =T), VSD50_sd = sd(Hull_bVSD_50, na.rm =T),
+                   VSD75_mean = mean(Hull_bVSD_75, na.rm =T), VSD75_sd = sd(Hull_bVSD_75, na.rm =T),
+                   VAS_mean = mean(VAS, na.rm =T), VAS_sd = sd(VAS, na.rm =T),
+                   OT_mean = mean(transAcc, na.rm =T), OT_sd = sd(transAcc, na.rm =T))
+
+AcousticData %>%
+  dplyr::group_by(Sex) %>%
+  dplyr::summarize(VSA_mean = mean(VSA_b, na.rm =T), VSA_sd = sd(VSA_b, na.rm = T),
+                   Disp_mean = mean(vowel_ED_b, na.rm =T), Disp_sd = sd(vowel_ED_b, na.rm =T),
+                   Hull_mean = mean(Hull_b, na.rm =T), Hull_sd = sd(Hull_b, na.rm =T),
+                   VSD25_mean = mean(Hull_bVSD_25, na.rm =T), VSD25_sd = sd(Hull_bVSD_25, na.rm =T),
+                   VSD50_mean = mean(Hull_bVSD_50, na.rm =T), VSD50_sd = sd(Hull_bVSD_50, na.rm =T),
+                   VSD75_mean = mean(Hull_bVSD_75, na.rm =T), VSD75_sd = sd(Hull_bVSD_75, na.rm =T),
+                   VAS_mean = mean(VAS, na.rm =T), VAS_sd = sd(VAS, na.rm =T),
+                   OT_mean = mean(transAcc, na.rm =T), OT_sd = sd(transAcc, na.rm =T))
+
+AcousticData %>%
+  dplyr::group_by(Etiology) %>%
+  dplyr::summarize(VSA_mean = mean(VSA_b, na.rm =T), VSA_sd = sd(VSA_b, na.rm = T),
+                   Disp_mean = mean(vowel_ED_b, na.rm =T), Disp_sd = sd(vowel_ED_b, na.rm =T),
+                   Hull_mean = mean(Hull_b, na.rm =T), Hull_sd = sd(Hull_b, na.rm =T),
+                   VSD25_mean = mean(Hull_bVSD_25, na.rm =T), VSD25_sd = sd(Hull_bVSD_25, na.rm =T),
+                   VSD50_mean = mean(Hull_bVSD_50, na.rm =T), VSD50_sd = sd(Hull_bVSD_50, na.rm =T),
+                   VSD75_mean = mean(Hull_bVSD_75, na.rm =T), VSD75_sd = sd(Hull_bVSD_75, na.rm =T),
+                   VAS_mean = mean(VAS, na.rm =T), VAS_sd = sd(VAS, na.rm =T),
+                   OT_mean = mean(transAcc, na.rm =T), OT_sd = sd(transAcc, na.rm =T))
+
+
+```
+
+### Acoustic Measures
+VSA
+```{r}
+
+## Specify the Model
+VSA_group <- aov(VSA_b ~ Etiology, data = AcousticData)
+
+## Assumption Check
+
+plot(VSA_group, 1)
+plot(VSA_group, 2)
+car::leveneTest(VSA_group)
+VSA_residuals <- residuals(object = VSA_group)
+shapiro.test(VSA_residuals)
+
+## Model Results
+
+summary(VSA_group)
+
+## Kruskal-Wallis Test 
+
+kruskal.test(VSA_b ~ Etiology, data = AcousticData)
+
+## Pairwise Comparisons
+
+pairwise.wilcox.test(AcousticData$VSA_b, AcousticData$Etiology, p.adjust.method = "bonferroni")
+
+```
+
+Corner Dispersion
+```{r}
+
+## Specify the Model
+disp_group <- aov(vowel_ED_b ~ Etiology, data = AcousticData)
+
+## Assumption Check
+
+plot(disp_group, 1)
+plot(disp_group, 2)
+car::leveneTest(disp_group)
+disp_residuals <- residuals(object = disp_group)
+shapiro.test(disp_residuals)
+
+## Model Results
+
+summary(disp_group)
+
+```
+
+Hull
+```{r}
+
+## Specify the Model
+hull_group <- aov(Hull_b ~ Etiology, data = AcousticData)
+
+## Assumption Check
+
+plot(hull_group, 1)
+plot(hull_group, 2)
+car::leveneTest(hull_group)
+hull_residuals <- residuals(object = hull_group)
+shapiro.test(hull_residuals)
+
+## Model Results
+
+summary(hull_group)
+
+```
+
+VSD 25
+```{r}
+
+## Specify the Model
+vsd25_group <- aov(Hull_bVSD_25 ~ Etiology, data = AcousticData)
+
+## Assumption Check
+
+plot(vsd25_group, 1)
+plot(vsd25_group, 2)
+car::leveneTest(vsd25_group)
+vsd25_residuals <- residuals(object = vsd25_group)
+shapiro.test(vsd25_residuals)
+
+## Model Summary
+
+summary(vsd25_group)
+
+
+```
+
+
+VSD 50
+```{r}
+
+## Specify the Model
+vsd50_group <- aov(Hull_bVSD_50 ~ Etiology, data = AcousticData)
+
+## Assumption Check
+
+plot(vsd50_group, 1)
+plot(vsd50_group, 2)
+car::leveneTest(vsd50_group)
+vsd50_residuals <- residuals(object = vsd50_group)
+shapiro.test(vsd50_residuals)
+
+## Model Results
+
+summary(vsd50_group)
+
+## Kruskal Wallis Test
+
+kruskal.test(Hull_bVSD_50 ~ Etiology, data = AcousticData)
+
+```
+
+VSD 75
+```{r}
+
+## Specify the Model
+vsd75_group <- aov(Hull_bVSD_75 ~ Etiology, data = AcousticData)
+
+## Assumption Check
+
+plot(vsd75_group, 1)
+plot(vsd75_group, 2)
+car::leveneTest(vsd75_group)
+vsd75_residuals <- residuals(object = vsd75_group)
+shapiro.test(vsd75_residuals)
+
+## Model Summary
+
+summary(vsd75_group)
+
+## Kruskal Wallis
+
+kruskal.test(Hull_bVSD_75 ~ Etiology, data = AcousticData)
+
+```
+
+## Group Comparisons - 2 Groups
 ### Two Dataframes for Incoord Groups
 
 ```{r}
@@ -709,7 +888,7 @@ anova(OT_Model9, OT_Model10)
 ```
 
 ### Model 11
-mo
+
 ```{r}
 
 ## Specifying Model 11
@@ -981,4 +1160,3 @@ SpeakerDemo %>%
   dplyr::summarize(mean_age = mean(Age, na.rm = T), age_sd = sd(Age, na.rm = T), age_range = range(Age, na.rm = T))
 
 ```
-
