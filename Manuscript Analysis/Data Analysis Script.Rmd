@@ -382,7 +382,7 @@ summary(OT_VAS_model)
 
 ```
 
-## Final Model
+## Final Linear Model
 
 ```{r}
 
@@ -397,7 +397,22 @@ confint(OT_VAS_final)
 summary(OT_VAS_final)
 
 ```
+## Quadratic Linear Model
 
+```{r}
+
+# Specify Final Model
+
+OT_VAS_final_quadratic <- lm(transAcc ~ VAS, data = AcousticData %>%
+                               dplyr::mutate(VAS = VAS^2))
+
+#confint(OT_VAS_final_quadratic)
+
+# Model Results
+
+summary(OT_VAS_final_quadratic)
+
+```
 # Manuscript Tables
 ##Descriptives Table
 ```{r}
