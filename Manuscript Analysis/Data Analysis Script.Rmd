@@ -833,7 +833,6 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
   rm(VSA_coords)
   
 ## Hull ----
-
 ### Plotting Hull
       convexCoords <- Formants_PRAAT %>%
         dplyr::select(F1_b, F2_b) %>%
@@ -966,17 +965,6 @@ geom.text.size <- 2
                hjust = "center",
                color = "white",
                parse = TRUE)
-      #geom_textcurve(data = data.frame(x = 10.382452, xend = 8.313515, y = 2.874967, yend = 4.127919, Density = 1),
-      #           aes(x, y, xend = xend, yend = yend),
-      #           hjust = 0.5,
-      #           vjust = -1,
-      #           curvature = 0,
-      #           size = geom.text.size,
-      #           label = "VSD 25",
-      #           text_only = T,
-      ##           color = "white",
-      #           fill = "white",
-       #          rich = TRUE) + 
      VSDplot
 
 # Combined Plot
