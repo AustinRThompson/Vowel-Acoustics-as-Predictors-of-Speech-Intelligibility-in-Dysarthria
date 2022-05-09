@@ -753,6 +753,7 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
   rm(VSA_coords)
   
 ## Automatic VSA ----
+<<<<<<< HEAD
   RefData <- openxlsx::read.xlsx("Prepped Data/Example Data/Hillenbrand Vowel Data.xlsx",
                      sheet = "Hillenbrand Vowel Data") %>%
   dplyr::rename(Speaker = 1,
@@ -803,13 +804,29 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
     autoVSAplot <- ggplot(aes(x = F2_b,
                           y = F1_b),
                       data = Formants_PRAAT,
+=======
+  autoVSA <- Formants_PRAAT %>%
+    dplyr::select(F1_b,F2_b) %>%
+    stats::kmeans(., centers = 12, nstart = 100, iter.max = 1000) %>%
+    .$centers %>%
+    as.data.frame()
+  
+### Plotting VSA
+    VSAplot <- ggplot(aes(x = F2_b,
+                          y = F1_b),
+                      data = autoVSA,
+>>>>>>> 26e5bd6986b694410b6824754b2c6ccb711143aa
                       inherit.aes = FALSE) + 
       geom_point(shape = 21,
                  alpha = formantAlpha,
                  color = formantColor) + 
       geom_polygon(aes(x = F2_b,
                        y = F1_b),
+<<<<<<< HEAD
                    data = autoConvex,
+=======
+                   data = autoVSA,
+>>>>>>> 26e5bd6986b694410b6824754b2c6ccb711143aa
                    alpha = lineAlpha,
                    color = lineColor,
                    fill=NA,
@@ -818,17 +835,29 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
                      y = F1_b),
                  data = autoVSA,
                  inherit.aes = FALSE,
+<<<<<<< HEAD
                  size = 2) +
+=======
+                 size = 5) +
+>>>>>>> 26e5bd6986b694410b6824754b2c6ccb711143aa
       scale_y_reverse() +
       scale_x_reverse() +
       #guides(color = FALSE) +
       theme_classic() +
+<<<<<<< HEAD
       labs(title = "Automatic VSA") +
+=======
+      labs(title = "VSA") +
+>>>>>>> 26e5bd6986b694410b6824754b2c6ccb711143aa
       xlab("F2 (bark)") +
       ylab("F1 (bark)") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1)
+<<<<<<< HEAD
     autoVSAplot
+=======
+    VSAplot
+>>>>>>> 26e5bd6986b694410b6824754b2c6ccb711143aa
   
   rm(VSA_coords)
   
