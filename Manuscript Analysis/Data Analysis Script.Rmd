@@ -752,6 +752,86 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
   
   rm(VSA_coords)
   
+## Automatic VSA ----
+  RefData <- openxlsx::read.xlsx("Prepped Data/Example Data/Hillenbrand Vowel Data.xlsx",
+                     sheet = "Hillenbrand Vowel Data") %>%
+  dplyr::rename(Speaker = 1,
+                F1_Hz = 4,
+                F2_Hz = 5) %>%
+  dplyr::select(Speaker, F1_Hz, F2_Hz) %>%
+  dplyr::filter(!grepl("b|g",Speaker)) %>%
+  dplyr::mutate(F1 = emuR::bark(F1_Hz),
+                F2 = emuR::bark(F2_Hz),
+                Sex = ifelse(grepl("m",Speaker),"M","F"),
+                Vowel = case_when(
+                  grepl(pattern = "uw", Speaker) ~ "u",
+                  grepl(pattern = "ah", Speaker) ~ "a",
+                  grepl(pattern = "iy", Speaker) ~ "i",
+                  grepl(pattern = "uh", Speaker) ~ "v",
+                  grepl(pattern = "ae", Speaker) ~ "ae",
+                  grepl(pattern = "aw", Speaker) ~ "ɔ",
+                  grepl(pattern = "eh", Speaker) ~ "ɛ",
+                  grepl(pattern = "er", Speaker) ~ "ɝ",
+                  grepl(pattern = "ei", Speaker) ~ "eɪ",
+                  grepl(pattern = "ih", Speaker) ~ "ɪ",
+                  grepl(pattern = "oa", Speaker) ~ "o",
+                  grepl(pattern = "oo", Speaker) ~ "ʊ"
+                )) %>%
+  dplyr::filter(!is.na(Vowel)) %>%
+  dplyr::select(!Speaker) %>%
+  dplyr::group_by(Sex, Vowel) %>%
+  dplyr::summarise(F1_Ref = mean(F1),
+                   F2_Ref = mean(F2)) %>%
+    dplyr::ungroup() %>%
+    dplyr::filter(Sex == "F") %>%
+    dplyr::select(!c(Sex, Vowel))
+  
+  autoVSA <- Formants_PRAAT %>%
+    dplyr::select(F1_b,F2_b) %>%
+    stats::kmeans(., centers = RefData, nstart = 100, iter.max = 1000) %>%
+    .$centers %>%
+    as.data.frame()
+  
+  convexCoords <- autoVSA %>%
+    as.matrix() %>%
+    grDevices::chull()
+  
+  autoConvex <- autoVSA %>%
+        slice(convexCoords)
+  
+### Plotting Automatic VSA
+    autoVSAplot <- ggplot(aes(x = F2_b,
+                          y = F1_b),
+                      data = Formants_PRAAT,
+                      inherit.aes = FALSE) + 
+      geom_point(shape = 21,
+                 alpha = formantAlpha,
+                 color = formantColor) + 
+      geom_polygon(aes(x = F2_b,
+                       y = F1_b),
+                   data = autoConvex,
+                   alpha = lineAlpha,
+                   color = lineColor,
+                   fill=NA,
+                   size = 1.5) +
+      geom_point(aes(x = F2_b,
+                     y = F1_b),
+                 data = autoVSA,
+                 inherit.aes = FALSE,
+                 size = 2) +
+      scale_y_reverse() +
+      scale_x_reverse() +
+      #guides(color = FALSE) +
+      theme_classic() +
+      labs(title = "Automatic VSA") +
+      xlab("F2 (bark)") +
+      ylab("F1 (bark)") +
+      theme(plot.title = element_text(hjust = 0.5),
+            aspect.ratio = 1)
+    autoVSAplot
+  
+  rm(VSA_coords)
+  
 ## Hull ----
 
 ### Plotting Hull
@@ -782,7 +862,7 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
   
 ## Vowel Space Density ----
 
-## Bark Normalized Density ----
+# Bark Normalized Density ----
 # selecting the bandwidth
 H_hpi <- ks::Hpi(x = Formants_PRAAT[,c("F2_b","F1_b")], pilot = "samse", pre = "scale", binned = T)
 
@@ -841,58 +921,81 @@ nconvex_75 <- nVSD_75 %>%
                           Density > .25 && Density < .75 ~ "VSD25",
                           TRUE ~ "VSD75"
                         ))
-geom.text.size <- 2.5
+geom.text.size <- 2
     VSDplot <- ggplot(data = plotData,
                       aes(x = F2.b,
                           y = F1.b,
                           fill = Density)) + 
       geom_tile() + 
       scale_fill_viridis_c() +
-      #scale_fill_gradientn(colours = r) +
       scale_x_reverse(expand = c(0, 0), 
                       breaks = round(seq(min(mat.melted$F2.b), 
-                                         max(mat.melted$F2.b)))) +
+                                         max(mat.melted$F2.b), by = 2))) +
       scale_y_reverse(expand = c(0, 0),
                       breaks = round(seq(min(mat.melted$F1.b),
-                                         max(mat.melted$F1.b)))) + 
+                                         max(mat.melted$F1.b), by = 2))) + 
       ylab("F1 (bark)") + xlab("F2 (bark)") +
       labs(title = "VSD Hull") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1) +
-      geom_polygon(data = nconvex_25, alpha = lineAlpha, color = lineColor, size = 1.5, fill = NA, linetype = 1) +
-      geom_polygon(data = nconvex_75, alpha = lineAlpha, color = lineColor, size = 1.5, fill = NA, linetype = 2) +
-      geom_labelcurve(data = data.frame(x = 10.382452, xend = 8.313515, y = 2.874967, yend = 4.127919, Density = 1), 
-                 aes(x, y, xend = xend, yend = yend),
-                 hjust = 0.5,
-                 vjust = 0,
-                 curvature = 0,
-                 size = geom.text.size,
-                 label = "VSD 25",
-                 text_only = T,
-                 color = "black",
-                 fill = "white",
-                 rich = TRUE) +
-        geom_labelcurve(data = data.frame(x = 14.92512, xend = 12.04660, y = 3.95, yend = 6, Density = 1), 
-                 aes(x, y, xend = xend, yend = yend),
-                 hjust = 0.3, 
-                 vjust = 0,
-                 curvature = 0,
-                 size = geom.text.size,
-                 fill = "white",
-                 label = "VSD 75",
-                 text_only = T,
-                 color = "black")
+      geom_polygon(data = nconvex_25, alpha = lineAlpha, color = lineColor, size = 1.5, fill = NA, linetype = 2) +
+      geom_polygon(data = nconvex_75, alpha = lineAlpha, color = lineColor, size = 1.5, fill = NA, linetype = 1) +
+    # VSD 25 Label
+      annotate(geom = "curve",
+               x = 6.9, y = 1.7+.5,
+               xend = 8.5, yend = 3.5,
+               curvature = -.3,
+               arrow = arrow(length = unit(2, "mm")),
+               color = "white") +
+      annotate(geom = "text",
+               x = 7.5, y = 1.7,
+               label = deparse(bquote(VSD[25])),
+               hjust = "center",
+               color = "white",
+               parse=TRUE) +
+    # VSD 75 Label
+      annotate(geom = "curve",
+               x = 7.5, y = 7.5-.5,
+               xend = 11.35, yend = 5.5,
+               curvature = .3,
+               arrow = arrow(length = unit(2, "mm")),
+               color = "white") +
+      annotate(geom = "text",
+               x = 7, y = 7.5,
+               label = deparse(bquote(VSD[75])),
+               hjust = "center",
+               color = "white",
+               parse = TRUE)
+      #geom_textcurve(data = data.frame(x = 10.382452, xend = 8.313515, y = 2.874967, yend = 4.127919, Density = 1),
+      #           aes(x, y, xend = xend, yend = yend),
+      #           hjust = 0.5,
+      #           vjust = -1,
+      #           curvature = 0,
+      #           size = geom.text.size,
+      #           label = "VSD 25",
+      #           text_only = T,
+      ##           color = "white",
+      #           fill = "white",
+       #          rich = TRUE) + 
      VSDplot
 
 # Combined Plot
-
-measuresPlot <- VSAplot + CDplot + hullPlot + VSDplot +
-      patchwork::plot_layout(guides = 'collect',
-                             ncol = 2)
+     
+     row1 <- VSAplot + autoVSAplot + CDplot +
+        patchwork::plot_layout(guides = 'collect',
+                         ncol = 3) & theme(legend.position = 'right')
+     row2 <- hullPlot + VSDplot +
+        patchwork::plot_layout(guides = 'collect',
+                         ncol = 2) & theme(legend.position = 'right')
+     
+     measuresPlot <- row1 / row2 + patchwork::plot_layout(heights = c(1/2, 1/2), byrow = FALSE)
+     measuresPlot
+     
+     rm(row1, row2)
 
 ggsave(filename = "Plots/Measures.png",
        plot = measuresPlot,
-       height = 7,
+       height = 5.5,
        width = 8,
        scale = .8)
 
