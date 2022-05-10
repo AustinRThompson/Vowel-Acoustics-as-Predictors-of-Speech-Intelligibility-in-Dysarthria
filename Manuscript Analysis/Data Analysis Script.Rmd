@@ -36,7 +36,9 @@ AcousticData <- rio::import("Prepped Data/AcousticMeasures.csv") %>%
 
 AcousticData <- AcousticData %>%
   dplyr::filter(!grepl("_rel", Speaker)) %>%
-  dplyr::select(c(Speaker, Sex, Etiology, vowel_ED_b, VSA_b, Hull_b, Hull_bVSD_25, Hull_bVSD_50, Hull_bVSD_75, VAS, transAcc)) %>%
+  dplyr::select(c(Speaker, Sex, Etiology, vowel_ED_b, VSA_b, autoVSA,
+                  Hull_b,Hull_bVSD_25, Hull_bVSD_50, Hull_bVSD_75,
+                  VAS, transAcc)) %>%
   dplyr::mutate(Etiology = as.factor(Etiology),
                 Sex = as.factor(Sex),
                 Speaker = as.factor(Speaker))
@@ -103,7 +105,7 @@ rm(F1_Rel, F2_Rel, Reliability, Single_F1, Single_F2, Average_F1, Average_F2)
 
 ```{r}
 CorrMatrix <- AcousticData %>%
-  dplyr::select(VSA_b, vowel_ED_b, Hull_b, Hull_bVSD_25, Hull_bVSD_50, Hull_bVSD_75, VAS, transAcc) %>%
+  dplyr::select(VSA_b, vowel_ED_b, Hull_b, Hull_bVSD_25, Hull_bVSD_50, Hull_bVSD_75, autoVSA, VAS, transAcc) %>%
   as.matrix() %>%
   Hmisc::rcorr()
 
@@ -163,11 +165,13 @@ Model 3
 
 ## Specifying Model 3
 
-OT_Model3 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b, data = AcousticData)
+OT_Model3 <- lm(transAcc ~ Hull_bVSD_75 + Hull_b, data = AcousticData)
 
 ## Model 3 Assumption Check
 
 performance::check_model(OT_Model3)
+performance::check_collinearity(OT_Model3)
+
 
 ## Model 3 Summary
 
@@ -184,11 +188,12 @@ Model 4
 
 ## Specifying Model 4
 
-OT_Model4 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b, data = AcousticData)
+OT_Model4 <- lm(transAcc ~ Hull_bVSD_75 + autoVSA, data = AcousticData)
 
 ## Model 4 Assumption Check
 
 performance::check_model(OT_Model4)
+performance::check_collinearity(OT_Model4)
 
 ## Model 4 Summary
 
@@ -204,11 +209,12 @@ Model 5
 
 ## Specifying Model 5
 
-OT_Model5 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b, data = AcousticData)
+OT_Model5 <- lm(transAcc ~ Hull_bVSD_75 + autoVSA + VSA_b, data = AcousticData)
 
 ## Model 4 Assumption Check
 
 performance::check_model(OT_Model5)
+performance::check_collinearity(OT_Model5)
 
 ## Model 4 Summary
 
@@ -217,6 +223,28 @@ summary(OT_Model5)
 ## Model 3 and Model 4 Comparison
 
 anova(OT_Model4, OT_Model5)
+
+```
+
+Model 6
+```{r}
+
+## Specifying Model 6
+
+OT_Model6 <- lm(transAcc ~ Hull_bVSD_75 + autoVSA + VSA_b + vowel_ED_b, data = AcousticData)
+
+## Model 6 Assumption Check
+
+performance::check_model(OT_Model6)
+performance::check_collinearity(OT_Model6)
+
+## Model 6 Summary
+
+summary(OT_Model6)
+
+## Model 5 and Model 6 Comparison
+
+anova(OT_Model5, OT_Model6)
 
 ```
 
@@ -285,11 +313,12 @@ Model 3
 
 ## Specifying Model 3
 
-VAS_Model3 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b, data = AcousticData)
+VAS_Model3 <- lm(VAS ~ Hull_bVSD_75 + Hull_b, data = AcousticData)
 
 ## Model 3 Assumption Check
 
 performance::check_model(VAS_Model3)
+performance::check_collinearity(VAS_Model3)
 
 ## Model 3 Summary
 
@@ -306,11 +335,12 @@ Model 4
 
 ## Specifying Model 4
 
-VAS_Model4 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b, data = AcousticData)
+VAS_Model4 <- lm(VAS ~ Hull_bVSD_75 + autoVSA, data = AcousticData)
 
 ## Model 4 Assumption Check
 
 performance::check_model(VAS_Model4)
+performance::check_collinearity(VAS_Model4)
 
 ## Model 4 Summary
 
@@ -327,7 +357,7 @@ Model 5
 
 ## Specifying Model 5
 
-VAS_Model5 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b, data = AcousticData)
+VAS_Model5 <- lm(VAS ~ Hull_bVSD_75 + autoVSA + VSA_b, data = AcousticData)
 
 ## Model 5 Assumption Check
 
@@ -343,6 +373,26 @@ anova(VAS_Model4, VAS_Model5)
 
 ```
 
+Model 6
+```{r}
+
+## Specifying Model 6
+
+VAS_Model6 <- lm(VAS ~ Hull_bVSD_75 + autoVSA + VSA_b + vowel_ED_b, data = AcousticData)
+
+## Model 6 Assumption Check
+
+performance::check_model(VAS_Model6)
+
+## Model 6 Summary
+
+summary(VAS_Model6)
+
+## Model 5 and Model 6 Comparison
+
+anova(VAS_Model5, VAS_Model6)
+
+```
 
 ### Final Model
 
@@ -496,7 +546,8 @@ gtData %>%
 
 ## OT Model
 ```{r}
-sjPlot::tab_model(OT_Model1,OT_Model2,OT_Model3, OT_Model4, OT_Model5, OT_Model_final,
+sjPlot::tab_model(OT_Model1,OT_Model2,OT_Model3,
+                  OT_Model4, OT_Model5,OT_Model6, OT_Model_final,
                   show.ci = F,
                   p.style = "stars",
                   file = "Tables/OT Models.html")
@@ -504,7 +555,13 @@ sjPlot::tab_model(OT_Model1,OT_Model2,OT_Model3, OT_Model4, OT_Model5, OT_Model_
 
 ## VAS Model
 ```{r}
-sjPlot::tab_model(VAS_Model1,VAS_Model2,VAS_Model3, VAS_Model4, VAS_Model5, VAS_Model_final,
+sjPlot::tab_model(VAS_Model1,
+                  VAS_Model2,
+                  VAS_Model3,
+                  VAS_Model4,
+                  VAS_Model5,
+                  VAS_Model6,
+                  VAS_Model_final,
                   show.ci = F,
                   p.style = "stars",
                   file = "Tables/VAS Models.html")
@@ -1278,11 +1335,11 @@ ggsave(filename = "Plots/OT and VAS Scatterplot.png",
 rm(scatter1, scatter2, combinedScatter)
 ```
 
-Model Scatterplot
+## Model Scatterplots
 ```{r}
 modelFigureData <- AcousticData %>%
   dplyr::filter(!grepl("_rel",Speaker)) %>%
-  dplyr::select(Speaker, Etiology, Sex, VSA_b, vowel_ED_b, Hull_b, Hull_bVSD_25, Hull_bVSD_75, VAS, transAcc) %>%
+  dplyr::select(Speaker, Etiology, Sex, autoVSA, VSA_b, vowel_ED_b, Hull_b, Hull_bVSD_25, Hull_bVSD_75, VAS, transAcc) %>%
   dplyr::mutate(Speaker = as.factor(Speaker),
                 Etiology = as.factor(Etiology),
                 Sex = as.factor(Sex)) %>%
@@ -1307,6 +1364,27 @@ VSA <- modelFigureData %>%
   geom_point() +
   geom_smooth(method = "lm", se = T, fill = "light grey") +
   xlab(expression("VSA (Bark"^2*")")) +
+  ylab(ylabel) +
+  coord_cartesian(ylim = c(0,100)) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        aspect.ratio=1) +
+  scale_color_manual(values = myPal) +
+  scale_shape_manual(values = myPalShape) +
+  labs(color="Intelligibility Type",
+       shape = "Intelligibility Type",
+       linetype = "Intelligibility Type")
+
+autoVSA <- modelFigureData %>%
+  ggplot() +
+  aes(x = autoVSA,
+      y = Int,
+      color = IntType,
+      shape = IntType,
+      linetype = IntType) +
+  geom_point() +
+  geom_smooth(method = "lm", se = T, fill = "light grey") +
+  xlab(expression("VSA"[Automatic]*" (Bark"^2*")")) +
   ylab(ylabel) +
   coord_cartesian(ylim = c(0,100)) +
   theme_classic() +
@@ -1400,13 +1478,13 @@ vsd75 <- modelFigureData %>%
 
 # Creating OT Scatterplot Figure
 
-scatter <- VSA + disp + patchwork::guide_area() + Hull + vsd25 + vsd75 +
+scatter <- VSA + autoVSA + disp + Hull + vsd25 + vsd75 +
   patchwork::plot_layout(guides = 'collect',
-                         ncol = 3)
+                         ncol = 3) & theme(legend.position = "bottom")
 scatter 
 
 ggsave("Plots/ModelFigure.png", scatter,
-       height = 4,
+       height = 4.5,
        width = 6,
        units = "in",
        scale = 1.1)
