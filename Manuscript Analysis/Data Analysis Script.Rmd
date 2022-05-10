@@ -105,14 +105,18 @@ rm(F1_Rel, F2_Rel, Reliability, Single_F1, Single_F2, Average_F1, Average_F2)
 
 ```{r}
 CorrMatrix <- AcousticData %>%
-  dplyr::select(VSA_b, vowel_ED_b, Hull_b, Hull_bVSD_25, Hull_bVSD_50, Hull_bVSD_75, autoVSA, VAS, transAcc) %>%
+  dplyr::select(VSA_b, vowel_ED_b, autoVSA, Hull_b, Hull_bVSD_25, Hull_bVSD_75, VAS, transAcc) %>%
   as.matrix() %>%
   Hmisc::rcorr()
+
+CorrMatrixP <- CorrMatrix$P < .05
 
 CorrMatrix <- CorrMatrix$r
 
 stats::cor.test(AcousticData$VSA_b, AcousticData$vowel_ED_b, method = "pearson")
 stats::cor.test(AcousticData$Hull_b, AcousticData$Hull_bVSD_25, method = "pearson")
+stats::cor.test(AcousticData$Hull_b, AcousticData$autoVSA, method = "pearson")
+
 
 write.csv(CorrMatrix, file = "Tables/Correlation Matrix.csv")
 rm(CorrMatrix)
@@ -478,6 +482,7 @@ gtData <- AcousticData %>%
   dplyr::group_by(Sex, Etiology) %>%
   dplyr::summarize(VSA_mean = mean(VSA_b, na.rm =T), VSA_sd = sd(VSA_b, na.rm = T),
                    Disp_mean = mean(vowel_ED_b, na.rm =T), Disp_sd = sd(vowel_ED_b, na.rm =T),
+                   autoVSA_mean = mean(autoVSA, na.rm =T), autoVSA_sd = sd(autoVSA, na.rm = T),
                    Hull_mean = mean(Hull_b, na.rm =T), Hull_sd = sd(Hull_b, na.rm =T),
                    VSD25_mean = mean(Hull_bVSD_25, na.rm =T), VSD25_sd = sd(Hull_bVSD_25, na.rm =T),
                    VSD50_mean = mean(Hull_bVSD_50, na.rm =T), VSD50_sd = sd(Hull_bVSD_50, na.rm =T),
@@ -486,14 +491,15 @@ gtData <- AcousticData %>%
                    OT_mean = mean(transAcc, na.rm =T), OT_sd = sd(transAcc, na.rm =T)) %>%
   pivot_longer(cols = VSA_mean:OT_sd, names_to = "Measure",
                values_to = "Value") %>%
-  dplyr::mutate(meanSD = ifelse(grepl("_mean",Measure),"M","sd"),
+  dplyr::mutate(Value = round(Value, digits = 2),
+                meanSD = ifelse(grepl("_mean",Measure),"M","sd"),
                 Measure = gsub("_mean","",Measure),
                 Measure = gsub("_sd","",Measure),
                 Etiology = paste(Etiology,meanSD, sep = "_"),
                 Sex = case_when(
                   Sex == "All" ~ "All Speakers",
-                  Sex == "M" ~ "Male",
-                  Sex == "F" ~ "Female"
+                  Sex == "M" ~ "Male Speakers",
+                  Sex == "F" ~ "Female Speakers"
                 )) %>%
   dplyr::select(!meanSD) %>%
   pivot_wider(names_from = Etiology, values_from = "Value") %>%
@@ -528,6 +534,12 @@ gtData %>%
     label = "Ataxic",
     columns = c(Ataxic_M, Ataxic_sd)
   ) %>%
+  gt::cols_move_to_start(
+    columns = c('All Etiologies_M','All Etiologies_sd')
+  ) %>%
+  row_group_order(
+    groups = c("All Speakers", "Female Speakers", "Male Speakers")
+    ) %>%
   cols_label(
      'All Etiologies_M' = "M",
      'All Etiologies_sd' = "SD",
@@ -1026,12 +1038,12 @@ geom.text.size <- 2
 
 # Combined Plot
      
-     row1 <- VSAplot + autoVSAplot + CDplot +
-        patchwork::plot_layout(guides = 'collect',
-                         ncol = 3) & theme(legend.position = 'right')
-     row2 <- hullPlot + VSDplot +
+     row1 <- VSAplot + CDplot +
         patchwork::plot_layout(guides = 'collect',
                          ncol = 2) & theme(legend.position = 'right')
+     row2 <- autoVSAplot + hullPlot + VSDplot +
+        patchwork::plot_layout(guides = 'collect',
+                         ncol = 3) & theme(legend.position = 'right')
      
      measuresPlot <- row1 / row2 + patchwork::plot_layout(heights = c(1/2, 1/2), byrow = FALSE)
      measuresPlot
@@ -1478,7 +1490,7 @@ vsd75 <- modelFigureData %>%
 
 # Creating OT Scatterplot Figure
 
-scatter <- VSA + autoVSA + disp + Hull + vsd25 + vsd75 +
+scatter <- VSA  + disp + autoVSA + Hull + vsd25 + vsd75 +
   patchwork::plot_layout(guides = 'collect',
                          ncol = 3) & theme(legend.position = "bottom")
 scatter 
