@@ -22,7 +22,6 @@ library(gt)
 library(patchwork)
 library(ks)
 library(emuR) # install.packages('emuR')
-library(geomtextpath) # remotes::install_github("AllanCameron/geomtextpath")
 
 ```
 
@@ -451,20 +450,19 @@ confint(OT_VAS_final)
 summary(OT_VAS_final)
 
 ```
-## Quadratic Linear Model
+
+# Corner Dispersion
+Looking at corner dispersion as the sole predictor.
 
 ```{r}
 
 # Specify Final Model
 
-OT_VAS_final_quadratic <- lm(transAcc ~ VAS, data = AcousticData %>%
-                               dplyr::mutate(VAS = VAS^2))
+OT_cornDisp <- lm(transAcc ~ vowel_ED_b, data = AcousticData)
+summary(OT_cornDisp)
 
-#confint(OT_VAS_final_quadratic)
-
-# Model Results
-
-summary(OT_VAS_final_quadratic)
+VAS_cornDisp <- lm(VAS ~ vowel_ED_b, data = AcousticData)
+summary(VAS_cornDisp)
 
 ```
 # Manuscript Tables
