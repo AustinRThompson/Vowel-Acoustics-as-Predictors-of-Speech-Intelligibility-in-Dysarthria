@@ -163,50 +163,88 @@ anova(OT_Model1, OT_Model2)
 
 ```
 
-Model 3
+Model 3a
 ```{r}
 
 ## Specifying Model 3
 
-OT_Model3 <- lm(transAcc ~ Hull_bVSD_75 + Hull_b, data = AcousticData)
+OT_Model3a <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b, data = AcousticData)
 
 ## Model 3 Assumption Check
 
-performance::check_model(OT_Model3)
-performance::check_collinearity(OT_Model3)
+performance::check_model(OT_Model3a)
+performance::check_collinearity(OT_Model3a)
 
 
 ## Model 3 Summary
 
-summary(OT_Model3)
+summary(OT_Model3a)
 
 ## Model 2 and Model 3 Comparison
 
-anova(OT_Model2, OT_Model3)
+anova(OT_Model2, OT_Model3a)
 
 ```
 
-Model 4
+Model 3b
+```{r}
+
+## Specifying Model 3
+
+OT_Model3b <- lm(transAcc ~ Hull_bVSD_75 + Hull_b, data = AcousticData)
+
+## Model 3 Assumption Check
+
+performance::check_model(OT_Model3b)
+performance::check_collinearity(OT_Model3b)
+
+
+## Model 3 Summary
+
+summary(OT_Model3b)
+
+```
+
+Model 4a
 ```{r}
 
 ## Specifying Model 4
 
-OT_Model4 <- lm(transAcc ~ Hull_bVSD_75 + autoVSA, data = AcousticData)
+OT_Model4a <- lm(transAcc ~ Hull_bVSD_75 + Hull_b + autoVSA, data = AcousticData)
 
 ## Model 4 Assumption Check
 
-performance::check_model(OT_Model4)
-performance::check_collinearity(OT_Model4)
+performance::check_model(OT_Model4a)
+performance::check_collinearity(OT_Model4a)
 
 ## Model 4 Summary
 
-summary(OT_Model4)
+summary(OT_Model4a)
 
 ## Model 3 and Model 4 Comparison
 
-anova(OT_Model3, OT_Model4)
+anova(OT_Model3b, OT_Model4a)
 
 ```
+
+Model 4b
+```{r}
+
+## Specifying Model 4
+
+OT_Model4b <- lm(transAcc ~ Hull_bVSD_75 + autoVSA, data = AcousticData)
+
+## Model 4 Assumption Check
+
+performance::check_model(OT_Model4b)
+performance::check_collinearity(OT_Model4b)
+
+## Model 4 Summary
+
+summary(OT_Model4b)
+
+```
+
 Model 5
 ```{r}
 
@@ -225,7 +263,7 @@ summary(OT_Model5)
 
 ## Model 3 and Model 4 Comparison
 
-anova(OT_Model4, OT_Model5)
+anova(OT_Model4b, OT_Model5)
 
 ```
 
@@ -311,50 +349,84 @@ anova(VAS_Model1, VAS_Model2)
 
 ```
 
-Model 3
+Model 3a
 ```{r}
 
 ## Specifying Model 3
 
-VAS_Model3 <- lm(VAS ~ Hull_bVSD_75 + Hull_b, data = AcousticData)
+VAS_Model3a <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b, data = AcousticData)
 
 ## Model 3 Assumption Check
 
-performance::check_model(VAS_Model3)
-performance::check_collinearity(VAS_Model3)
+performance::check_model(VAS_Model3a)
+performance::check_collinearity(VAS_Model3a)
 
 ## Model 3 Summary
 
-summary(VAS_Model3)
+summary(VAS_Model3a)
 
 ## Model 2 and Model 3 Comparison
 
-anova(VAS_Model2, VAS_Model3)
+anova(VAS_Model2, VAS_Model3a)
 
 ```
 
-Model 4
+Model 3b
+```{r}
+
+## Specifying Model 3b
+
+VAS_Model3b <- lm(VAS ~  Hull_bVSD_75 + Hull_b, data = AcousticData)
+
+## Model 3 Assumption Check
+
+performance::check_model(VAS_Model3b)
+performance::check_collinearity(VAS_Model3b)
+
+## Model 3 Summary
+
+summary(VAS_Model3b)
+
+```
+Model 4a
 ```{r}
 
 ## Specifying Model 4
 
-VAS_Model4 <- lm(VAS ~ Hull_bVSD_75 + autoVSA, data = AcousticData)
+VAS_Model4a <- lm(VAS ~ Hull_bVSD_75 + autoVSA + Hull_b, data = AcousticData)
 
 ## Model 4 Assumption Check
 
-performance::check_model(VAS_Model4)
-performance::check_collinearity(VAS_Model4)
+performance::check_model(VAS_Model4a)
+performance::check_collinearity(VAS_Model4a)
 
 ## Model 4 Summary
 
-summary(VAS_Model4)
+summary(VAS_Model4a)
 
 ## Model 3 and Model 4 Comparison
 
-anova(VAS_Model3, VAS_Model4)
+anova(VAS_Model3b, VAS_Model4a)
 
 ```
 
+Model 4b
+```{r}
+
+## Specifying Model 4
+
+VAS_Model4b <- lm(VAS ~ Hull_bVSD_75 + autoVSA, data = AcousticData)
+
+## Model 4 Assumption Check
+
+performance::check_model(VAS_Model4b)
+performance::check_collinearity(VAS_Model4b)
+
+## Model 4 Summary
+
+summary(VAS_Model4b)
+
+```
 Model 5
 ```{r}
 
@@ -372,7 +444,7 @@ summary(VAS_Model5)
 
 ## Model 4 and Model 5 Comparison
 
-anova(VAS_Model4, VAS_Model5)
+anova(VAS_Model4b, VAS_Model5)
 
 ```
 
