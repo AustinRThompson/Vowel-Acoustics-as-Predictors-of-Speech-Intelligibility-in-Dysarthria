@@ -1572,6 +1572,363 @@ ggsave("Plots/ModelFigure.png", scatter,
        scale = 1.1)
 ```
 
+## Filtering at Different Levels
+```{r}
+text_x <- 13
+text_y <- 8.5
+xlims <- c(16,5)
+ylims <- c(9,1)
+# Hull - 2 SD ----
+Pitch_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = ""), 
+                              pattern = ".Pitch", ignore.case = T) %>%
+    paste("Prepped Data/Example Data/",., sep = "") %>%
+    read.delim(., header = F) %>%
+    dplyr::rename(Pitch = V1) %>%
+    dplyr::mutate(Pitch = gsub("--undefined--",NA,Pitch),
+                  Pitch = as.numeric(Pitch))
+
+Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = ""), 
+                              pattern = "_Formant", ignore.case = T) %>%
+    paste("Prepped Data/Example Data/",., sep = "") %>%
+    read.delim(., header = T) %>%
+    dplyr::select(!c(nformants, B1.Hz., B2.Hz., B3.Hz., F4.Hz., B4.Hz., F5.Hz., B5.Hz.)) %>%
+    dplyr::rename(Time_s = time.s.,
+                  F1_Hz = F1.Hz.,
+                  F2_Hz = F2.Hz.,
+                  F3_Hz = F3.Hz.) %>%
+    dplyr::mutate(F1_Hz = ifelse(F1_Hz == 0, NA, F1_Hz),
+                  F2_Hz = ifelse(F2_Hz == 0, NA, F2_Hz),
+                  F3_Hz = ifelse(F3_Hz == 0, NA, F3_Hz)) %>%
+    dplyr::mutate(F1_Hz = as.numeric(F1_Hz),
+                  F2_Hz = as.numeric(F2_Hz),
+                  F3_Hz = suppressWarnings(as.numeric(F3_Hz)),
+                  Time_ms = Time_s / 1000,
+                  F1_kHz = F1_Hz / 1000,
+                  F2_kHz = F2_Hz / 1000,
+                  F3_kHz = F3_Hz / 1000,
+                  F1_b = emuR::bark(F1_Hz),
+                  F2_b = emuR::bark(F2_Hz),
+                  F3_b = emuR::bark(F3_Hz)) %>%
+    dplyr::select(!Time_s) %>%
+    dplyr::relocate(Time_ms, .before = F1_Hz) %>%
+    cbind(.,Pitch_PRAAT) %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+    dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T))) %>%
+    #dplyr::mutate(mDistOutlier = (stats::pchisq(mDist, df=1, lower.tail=FALSE)) < .001) %>%
+    dplyr::filter(mDist_sd < 2)
+  
+  c <- 2
+  while(c < NROW(Formants_PRAAT)){
+    Formants_PRAAT$F1_Hz[c] <- ifelse(is.na(Formants_PRAAT$F1_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F1_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F1_Hz[c])
+    Formants_PRAAT$F2_Hz[c] <- ifelse(is.na(Formants_PRAAT$F2_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F2_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F2_Hz[c])
+    c <- c + 1
+  }
+  rm(c)
+  
+    Hull_b <- cHull(Formants_PRAAT$F1_b, Formants_PRAAT$F2_b)
+### Plotting Hull
+      convexCoords <- Formants_PRAAT %>%
+        dplyr::select(F1_b, F2_b) %>%
+        as.matrix() %>%
+        grDevices::chull()
+      convex <- Formants_PRAAT %>%
+        slice(convexCoords)
+
+      hullPlot_2 <- ggplot(aes(F2_b, F1_b),
+                         data = Formants_PRAAT) +
+        geom_point(shape = 21) +
+        geom_polygon(data = convex,
+                     alpha = .5,
+                     color = "#1279B5",
+                     fill = NA,
+                     size = 1.5) +
+        annotate("text", x = text_x, y = text_y, label = paste("Hull = ",round(Hull_b,3))) +
+        scale_y_reverse() +
+        scale_x_reverse() +
+        xlim(xlims) +
+        ylim(ylims) +
+        theme_classic() + labs(title = paste("VSA Hull - 2 SD")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme(plot.title = element_text(hjust = 0.5))
+      hullPlot_2
+      
+# Hull - 2.5 SD ----
+Pitch_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = ""), 
+                              pattern = ".Pitch", ignore.case = T) %>%
+    paste("Prepped Data/Example Data/",., sep = "") %>%
+    read.delim(., header = F) %>%
+    dplyr::rename(Pitch = V1) %>%
+    dplyr::mutate(Pitch = gsub("--undefined--",NA,Pitch),
+                  Pitch = as.numeric(Pitch))
+
+Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = ""), 
+                              pattern = "_Formant", ignore.case = T) %>%
+    paste("Prepped Data/Example Data/",., sep = "") %>%
+    read.delim(., header = T) %>%
+    dplyr::select(!c(nformants, B1.Hz., B2.Hz., B3.Hz., F4.Hz., B4.Hz., F5.Hz., B5.Hz.)) %>%
+    dplyr::rename(Time_s = time.s.,
+                  F1_Hz = F1.Hz.,
+                  F2_Hz = F2.Hz.,
+                  F3_Hz = F3.Hz.) %>%
+    dplyr::mutate(F1_Hz = ifelse(F1_Hz == 0, NA, F1_Hz),
+                  F2_Hz = ifelse(F2_Hz == 0, NA, F2_Hz),
+                  F3_Hz = ifelse(F3_Hz == 0, NA, F3_Hz)) %>%
+    dplyr::mutate(F1_Hz = as.numeric(F1_Hz),
+                  F2_Hz = as.numeric(F2_Hz),
+                  F3_Hz = suppressWarnings(as.numeric(F3_Hz)),
+                  Time_ms = Time_s / 1000,
+                  F1_kHz = F1_Hz / 1000,
+                  F2_kHz = F2_Hz / 1000,
+                  F3_kHz = F3_Hz / 1000,
+                  F1_b = emuR::bark(F1_Hz),
+                  F2_b = emuR::bark(F2_Hz),
+                  F3_b = emuR::bark(F3_Hz)) %>%
+    dplyr::select(!Time_s) %>%
+    dplyr::relocate(Time_ms, .before = F1_Hz) %>%
+    cbind(.,Pitch_PRAAT) %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+    dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T))) %>%
+    #dplyr::mutate(mDistOutlier = (stats::pchisq(mDist, df=1, lower.tail=FALSE)) < .001) %>%
+    dplyr::filter(mDist_sd < 2.5)
+  
+  c <- 2
+  while(c < NROW(Formants_PRAAT)){
+    Formants_PRAAT$F1_Hz[c] <- ifelse(is.na(Formants_PRAAT$F1_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F1_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F1_Hz[c])
+    Formants_PRAAT$F2_Hz[c] <- ifelse(is.na(Formants_PRAAT$F2_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F2_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F2_Hz[c])
+    c <- c + 1
+  }
+  rm(c)
+  
+    Hull_b <- cHull(Formants_PRAAT$F1_b, Formants_PRAAT$F2_b)
+### Plotting Hull
+      convexCoords <- Formants_PRAAT %>%
+        dplyr::select(F1_b, F2_b) %>%
+        as.matrix() %>%
+        grDevices::chull()
+      convex <- Formants_PRAAT %>%
+        slice(convexCoords)
+
+      hullPlot_2.5 <- ggplot(aes(F2_b, F1_b),
+                         data = Formants_PRAAT) +
+        geom_point(shape = 21) +
+        geom_polygon(data = convex,
+                     alpha = .5,
+                     color = "#1279B5",
+                     fill = NA,
+                     size = 1.5) +
+        annotate("text", x = text_x, y = text_y, label = paste("Hull = ",round(Hull_b,3))) +
+        scale_y_reverse() +
+        scale_x_reverse() +
+        xlim(xlims) +
+        ylim(ylims) +
+        theme_classic() + labs(title = paste("VSA Hull - 2.5 SD")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme(plot.title = element_text(hjust = 0.5))
+      hullPlot_2.5
+      
+# Hull - 3 SD ----
+Pitch_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = ""), 
+                              pattern = ".Pitch", ignore.case = T) %>%
+    paste("Prepped Data/Example Data/",., sep = "") %>%
+    read.delim(., header = F) %>%
+    dplyr::rename(Pitch = V1) %>%
+    dplyr::mutate(Pitch = gsub("--undefined--",NA,Pitch),
+                  Pitch = as.numeric(Pitch))
+
+Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = ""), 
+                              pattern = "_Formant", ignore.case = T) %>%
+    paste("Prepped Data/Example Data/",., sep = "") %>%
+    read.delim(., header = T) %>%
+    dplyr::select(!c(nformants, B1.Hz., B2.Hz., B3.Hz., F4.Hz., B4.Hz., F5.Hz., B5.Hz.)) %>%
+    dplyr::rename(Time_s = time.s.,
+                  F1_Hz = F1.Hz.,
+                  F2_Hz = F2.Hz.,
+                  F3_Hz = F3.Hz.) %>%
+    dplyr::mutate(F1_Hz = ifelse(F1_Hz == 0, NA, F1_Hz),
+                  F2_Hz = ifelse(F2_Hz == 0, NA, F2_Hz),
+                  F3_Hz = ifelse(F3_Hz == 0, NA, F3_Hz)) %>%
+    dplyr::mutate(F1_Hz = as.numeric(F1_Hz),
+                  F2_Hz = as.numeric(F2_Hz),
+                  F3_Hz = suppressWarnings(as.numeric(F3_Hz)),
+                  Time_ms = Time_s / 1000,
+                  F1_kHz = F1_Hz / 1000,
+                  F2_kHz = F2_Hz / 1000,
+                  F3_kHz = F3_Hz / 1000,
+                  F1_b = emuR::bark(F1_Hz),
+                  F2_b = emuR::bark(F2_Hz),
+                  F3_b = emuR::bark(F3_Hz)) %>%
+    dplyr::select(!Time_s) %>%
+    dplyr::relocate(Time_ms, .before = F1_Hz) %>%
+    cbind(.,Pitch_PRAAT) %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+    dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T))) %>%
+    #dplyr::mutate(mDistOutlier = (stats::pchisq(mDist, df=1, lower.tail=FALSE)) < .001) %>%
+    dplyr::filter(mDist_sd < 3)
+  
+  c <- 2
+  while(c < NROW(Formants_PRAAT)){
+    Formants_PRAAT$F1_Hz[c] <- ifelse(is.na(Formants_PRAAT$F1_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F1_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F1_Hz[c])
+    Formants_PRAAT$F2_Hz[c] <- ifelse(is.na(Formants_PRAAT$F2_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F2_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F2_Hz[c])
+    c <- c + 1
+  }
+  rm(c)
+  
+    Hull_b <- cHull(Formants_PRAAT$F1_b, Formants_PRAAT$F2_b)
+### Plotting Hull
+      convexCoords <- Formants_PRAAT %>%
+        dplyr::select(F1_b, F2_b) %>%
+        as.matrix() %>%
+        grDevices::chull()
+      convex <- Formants_PRAAT %>%
+        slice(convexCoords)
+
+      hullPlot_3 <- ggplot(aes(F2_b, F1_b),
+                         data = Formants_PRAAT) +
+        geom_point(shape = 21) +
+        geom_polygon(data = convex,
+                     alpha = .5,
+                     color = "#1279B5",
+                     fill = NA,
+                     size = 1.5) +
+        annotate("text", x = text_x, y = text_y, label = paste("Hull = ",round(Hull_b,3))) +
+        scale_y_reverse() +
+        scale_x_reverse() +
+        xlim(xlims) +
+        ylim(ylims) +
+        theme_classic() + labs(title = paste("VSA Hull - 3 SD")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme(plot.title = element_text(hjust = 0.5))
+      hullPlot_3
+      
+# Hull - 1.5 SD ----
+Pitch_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = ""), 
+                              pattern = ".Pitch", ignore.case = T) %>%
+    paste("Prepped Data/Example Data/",., sep = "") %>%
+    read.delim(., header = F) %>%
+    dplyr::rename(Pitch = V1) %>%
+    dplyr::mutate(Pitch = gsub("--undefined--",NA,Pitch),
+                  Pitch = as.numeric(Pitch))
+
+Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = ""), 
+                              pattern = "_Formant", ignore.case = T) %>%
+    paste("Prepped Data/Example Data/",., sep = "") %>%
+    read.delim(., header = T) %>%
+    dplyr::select(!c(nformants, B1.Hz., B2.Hz., B3.Hz., F4.Hz., B4.Hz., F5.Hz., B5.Hz.)) %>%
+    dplyr::rename(Time_s = time.s.,
+                  F1_Hz = F1.Hz.,
+                  F2_Hz = F2.Hz.,
+                  F3_Hz = F3.Hz.) %>%
+    dplyr::mutate(F1_Hz = ifelse(F1_Hz == 0, NA, F1_Hz),
+                  F2_Hz = ifelse(F2_Hz == 0, NA, F2_Hz),
+                  F3_Hz = ifelse(F3_Hz == 0, NA, F3_Hz)) %>%
+    dplyr::mutate(F1_Hz = as.numeric(F1_Hz),
+                  F2_Hz = as.numeric(F2_Hz),
+                  F3_Hz = suppressWarnings(as.numeric(F3_Hz)),
+                  Time_ms = Time_s / 1000,
+                  F1_kHz = F1_Hz / 1000,
+                  F2_kHz = F2_Hz / 1000,
+                  F3_kHz = F3_Hz / 1000,
+                  F1_b = emuR::bark(F1_Hz),
+                  F2_b = emuR::bark(F2_Hz),
+                  F3_b = emuR::bark(F3_Hz)) %>%
+    dplyr::select(!Time_s) %>%
+    dplyr::relocate(Time_ms, .before = F1_Hz) %>%
+    cbind(.,Pitch_PRAAT) %>%
+    dplyr::filter(!is.na(Pitch)) %>%
+    dplyr::mutate(F1_mad = (abs(F1_Hz - median(F1_Hz))/ mad(F1_Hz, constant = 1.4826)) > 2.5,
+                  F2_mad = (abs(F2_Hz - median(F2_Hz))/ mad(F2_Hz, constant = 1.4826)) > 2.5) %>%
+    dplyr::filter(F1_mad == FALSE & F2_mad == FALSE) %>%
+    dplyr::mutate(mDist = mahalanobis(cbind(.$F1_Hz, .$F2_Hz),
+                                      colMeans(cbind(.$F1_Hz, .$F2_Hz)),
+                                      cov = cov(cbind(.$F1_Hz, .$F2_Hz))),
+                  mDist_sd = abs(scale(mDist,center = T))) %>%
+    #dplyr::mutate(mDistOutlier = (stats::pchisq(mDist, df=1, lower.tail=FALSE)) < .001) %>%
+    dplyr::filter(mDist_sd < 1.5)
+  
+  c <- 2
+  while(c < NROW(Formants_PRAAT)){
+    Formants_PRAAT$F1_Hz[c] <- ifelse(is.na(Formants_PRAAT$F1_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F1_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F1_Hz[c])
+    Formants_PRAAT$F2_Hz[c] <- ifelse(is.na(Formants_PRAAT$F2_Hz[c-1]) &&
+                                        is.na(Formants_PRAAT$F2_Hz[c+1]),
+                                      NA,
+                                      Formants_PRAAT$F2_Hz[c])
+    c <- c + 1
+  }
+  rm(c)
+  
+    Hull_b <- cHull(Formants_PRAAT$F1_b, Formants_PRAAT$F2_b)
+### Plotting Hull
+      convexCoords <- Formants_PRAAT %>%
+        dplyr::select(F1_b, F2_b) %>%
+        as.matrix() %>%
+        grDevices::chull()
+      convex <- Formants_PRAAT %>%
+        slice(convexCoords)
+
+      hullPlot_1.5 <- ggplot(aes(F2_b, F1_b),
+                         data = Formants_PRAAT) +
+        geom_point(shape = 21) +
+        geom_polygon(data = convex,
+                     alpha = .5,
+                     color = "#1279B5",
+                     fill = NA,
+                     size = 1.5) +
+        annotate("text", x = text_x, y = text_y, label = paste("Hull = ",round(Hull_b,3))) +
+        scale_y_reverse() +
+        scale_x_reverse() +
+        xlim(xlims) +
+        ylim(ylims) +
+        theme_classic() + labs(title = paste("VSA Hull - 1.5 SD")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme(plot.title = element_text(hjust = 0.5))
+      hullPlot_1.5
+      
+# Combined ----
+      ggpubr::ggarrange(hullPlot_1.5, hullPlot_2, hullPlot_2.5, hullPlot_3,
+                        ncol = 4)
+      ggsave(filename = "Plots/Hull at Different Filters.png",
+             height = 3,
+             width= 9,
+             units = "in",
+             scale = 1.25)
+      
+```
+
 # Listener Demographic Information
 ```{r}
 
