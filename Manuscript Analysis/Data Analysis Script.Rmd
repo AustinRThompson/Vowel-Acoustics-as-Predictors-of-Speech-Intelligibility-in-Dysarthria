@@ -760,7 +760,7 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
                  size = 5) +
       scale_y_reverse() +
       scale_x_reverse() +
-      theme_classic() + labs(title = paste("Corner Dispersion")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme_classic() + labs(title = paste("Corner Dispersion")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1) +
           scale_color_manual(values = c("a" = "#1AAD77",
@@ -813,7 +813,7 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
       scale_y_reverse() +
       scale_x_reverse() +
       guides(color = FALSE) +
-      theme_classic() + labs(title = "VSA") + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme_classic() + labs(title = "VSA") + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1) +
                 scale_color_manual(values = c("a" = "#1AAD77",
@@ -845,7 +845,9 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
                      size = 1.5) +
         scale_y_reverse() +
         scale_x_reverse() +
-        theme_classic() + labs(title = "VSA Hull") + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme_classic() + labs(title = expression("VSA"[Hull])) +
+                                 xlab("F2 (Bark)") +
+                                 ylab("F1 (Bark)") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1)
       hullPlot
@@ -925,7 +927,7 @@ geom.text.size <- 2
       scale_y_reverse(expand = c(0, 0),
                       breaks = round(seq(min(mat.melted$F1.b),
                                          max(mat.melted$F1.b), by = 2))) + 
-      ylab("F1 (bark)") + xlab("F2 (bark)") +
+      ylab("F1 (Bark)") + xlab("F2 (Bark)") +
       labs(title = "VSD Hull") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1) +
@@ -966,7 +968,7 @@ geom.text.size <- 2
                          ncol = 2) & theme(legend.position = 'right')
      row2 <- hullPlot + VSDplot +
         patchwork::plot_layout(guides = 'collect',
-                         ncol = 3) & theme(legend.position = 'right')
+                         ncol = 2) & theme(legend.position = 'right')
      
      measuresPlot <- row1 / row2 + patchwork::plot_layout(heights = c(1/2, 1/2), byrow = FALSE)
      measuresPlot
@@ -976,7 +978,7 @@ geom.text.size <- 2
 ggsave(filename = "Plots/Measures.png",
        plot = measuresPlot,
        height = 5.5,
-       width = 8,
+       width = 6,
        scale = .8)
 
 ```
@@ -1039,12 +1041,10 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
                    y=F1_b),
                data = Formants_PRAAT) + 
       geom_point(shape = 21, color = myPal[2]) +
-      scale_y_reverse() +
-      scale_x_reverse() +
-      #scale_y_reverse(limits = c(16,0)) +
-      #scale_x_reverse(limits = c(19,3)) +
+      scale_y_reverse(limits = c(16,0)) +
+      scale_x_reverse(limits = c(19,3)) +
       scale_color_manual(values = myPal) +
-      theme_classic() + labs(title = paste("Raw Formant Values")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme_classic() + labs(title = paste("Raw Formant\nValues")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1,
             legend.title = element_blank(),
@@ -1064,14 +1064,12 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
                    dplyr::filter(isOutlier == "Removed")) +
       geom_point(shape = 21, data = plotData %>%
              dplyr::filter(isOutlier == "Retained")) +
-      scale_y_reverse() +
-      scale_x_reverse() +
-      #scale_y_reverse(limits = c(16,0)) +
-      #scale_x_reverse(limits = c(19,3)) +
+      scale_y_reverse(limits = c(16,0)) +
+      scale_x_reverse(limits = c(19,3)) +
       scale_color_manual(values = myPal) +
       theme_classic() + labs(title = paste("Voiced Segments")) +
-      xlab("F2 (bark)") +
-      ylab("F1 (bark)") +
+      xlab("F2 (Bark)") +
+      ylab("F1 (Bark)") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1,
             legend.title = element_blank(),
@@ -1095,15 +1093,13 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
                    dplyr::filter(isOutlier == "Removed")) +
       geom_point(shape = 21, data = plotData %>%
              dplyr::filter(isOutlier == "Retained")) +
-      scale_y_reverse() +
-      scale_x_reverse() +
-      #scale_y_reverse(limits = c(16,0)) +
-      #scale_x_reverse(limits = c(19,3)) +
+      scale_y_reverse(limits = c(16,0)) +
+      scale_x_reverse(limits = c(19,3)) +
       scale_color_manual(values = myPal) +
       theme_classic() +
       labs(title = paste("Median Absolute\nDeviation")) +
-      xlab("F2 (bark)") +
-      ylab("F1 (bark)") +
+      xlab("F2 (Bark)") +
+      ylab("F1 (Bark)") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1,
             legend.title = element_blank(),
@@ -1132,12 +1128,10 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
                    dplyr::filter(isOutlier == "Removed")) +
       geom_point(shape = 21, data = plotData %>%
              dplyr::filter(isOutlier == "Retained")) +
-      scale_y_reverse() +
-      scale_x_reverse() +
-      #scale_y_reverse(limits = c(16,0)) +
-      #scale_x_reverse(limits = c(19,3)) +
+      scale_y_reverse(limits = c(16,0)) +
+      scale_x_reverse(limits = c(19,3)) +
       scale_color_manual(values = myPal) +
-      theme_classic() + labs(title = paste("Mahalanobis\nDistance")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme_classic() + labs(title = paste("Mahalanobis\nDistance")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1,
             legend.title = element_blank(),
@@ -1160,11 +1154,9 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
                        data = plotData,
                        inherit.aes = FALSE) + 
       geom_point(shape = 21, color = myPal[2]) + 
-      scale_y_reverse() +
-      scale_x_reverse() +
-      #scale_y_reverse(limits = c(16,0)) +
-      #scale_x_reverse(limits = c(19,3)) +
-      theme_classic() + labs(title = paste("Final Formant Values")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      scale_y_reverse(limits = c(16,0)) +
+      scale_x_reverse(limits = c(19,3)) +
+      theme_classic() + labs(title = paste("Final Formant\nTrajectories")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1, legend.title = element_blank())
     
@@ -1502,7 +1494,7 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
         scale_x_reverse() +
         xlim(xlims) +
         ylim(ylims) +
-        theme_classic() + labs(title = paste("VSA Hull - 2 SD")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme_classic() + labs(title = paste("VSA Hull - 2 SD")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
         theme(plot.title = element_text(hjust = 0.5))
       hullPlot_2
       
@@ -1587,7 +1579,7 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
         scale_x_reverse() +
         xlim(xlims) +
         ylim(ylims) +
-        theme_classic() + labs(title = paste("VSA Hull - 2.5 SD")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme_classic() + labs(title = paste("VSA Hull - 2.5 SD")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
         theme(plot.title = element_text(hjust = 0.5))
       hullPlot_2.5
       
@@ -1672,7 +1664,7 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
         scale_x_reverse() +
         xlim(xlims) +
         ylim(ylims) +
-        theme_classic() + labs(title = paste("VSA Hull - 3 SD")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme_classic() + labs(title = paste("VSA Hull - 3 SD")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
         theme(plot.title = element_text(hjust = 0.5))
       hullPlot_3
       
@@ -1757,7 +1749,7 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
         scale_x_reverse() +
         xlim(xlims) +
         ylim(ylims) +
-        theme_classic() + labs(title = paste("VSA Hull - 1.5 SD")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+        theme_classic() + labs(title = paste("VSA Hull - 1.5 SD")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
         theme(plot.title = element_text(hjust = 0.5))
       hullPlot_1.5
       
