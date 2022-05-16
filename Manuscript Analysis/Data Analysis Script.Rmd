@@ -1188,6 +1188,8 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
       geom_point(shape = 21, color = myPal[2]) +
       scale_y_reverse() +
       scale_x_reverse() +
+      #scale_y_reverse(limits = c(16,0)) +
+      #scale_x_reverse(limits = c(19,3)) +
       scale_color_manual(values = myPal) +
       theme_classic() + labs(title = paste("Raw Formant Values")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
       theme(plot.title = element_text(hjust = 0.5),
@@ -1211,8 +1213,10 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
              dplyr::filter(isOutlier == "Retained")) +
       scale_y_reverse() +
       scale_x_reverse() +
+      #scale_y_reverse(limits = c(16,0)) +
+      #scale_x_reverse(limits = c(19,3)) +
       scale_color_manual(values = myPal) +
-      theme_classic() + labs(title = paste("Step #1:\nVoiced Segments")) +
+      theme_classic() + labs(title = paste("Voiced Segments")) +
       xlab("F2 (bark)") +
       ylab("F1 (bark)") +
       theme(plot.title = element_text(hjust = 0.5),
@@ -1240,9 +1244,11 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
              dplyr::filter(isOutlier == "Retained")) +
       scale_y_reverse() +
       scale_x_reverse() +
+      #scale_y_reverse(limits = c(16,0)) +
+      #scale_x_reverse(limits = c(19,3)) +
       scale_color_manual(values = myPal) +
       theme_classic() +
-      labs(title = paste("Step #2:\nMedian Absolute Deviation")) +
+      labs(title = paste("Median Absolute\nDeviation")) +
       xlab("F2 (bark)") +
       ylab("F1 (bark)") +
       theme(plot.title = element_text(hjust = 0.5),
@@ -1275,8 +1281,10 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
              dplyr::filter(isOutlier == "Retained")) +
       scale_y_reverse() +
       scale_x_reverse() +
+      #scale_y_reverse(limits = c(16,0)) +
+      #scale_x_reverse(limits = c(19,3)) +
       scale_color_manual(values = myPal) +
-      theme_classic() + labs(title = paste("Step #3:\nMahalanobis Distance")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
+      theme_classic() + labs(title = paste("Mahalanobis\nDistance")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1,
             legend.title = element_blank(),
@@ -1301,6 +1309,8 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
       geom_point(shape = 21, color = myPal[2]) + 
       scale_y_reverse() +
       scale_x_reverse() +
+      #scale_y_reverse(limits = c(16,0)) +
+      #scale_x_reverse(limits = c(19,3)) +
       theme_classic() + labs(title = paste("Final Formant Values")) + xlab("F2 (bark)") + ylab("F1 (bark)") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1, legend.title = element_blank())
@@ -1308,7 +1318,8 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
 # Comibing plots
     filteredPlot <- f1 + f2 + f3 + f4 + f5 + patchwork::guide_area() +
       patchwork::plot_layout(guides = 'collect',
-                         ncol = 3)
+                         ncol = 3) +
+      patchwork::plot_annotation(tag_levels = 'A')
     filteredPlot
     
     ggsave(plot = filteredPlot, "Plots/Filtered Formants.png",
