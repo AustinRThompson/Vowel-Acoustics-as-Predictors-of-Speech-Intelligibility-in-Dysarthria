@@ -928,7 +928,7 @@ geom.text.size <- 2
                       breaks = round(seq(min(mat.melted$F1.b),
                                          max(mat.melted$F1.b), by = 2))) + 
       ylab("F1 (Bark)") + xlab("F2 (Bark)") +
-      labs(title = "VSD Hull") +
+      labs(title = "VSD") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1) +
       geom_polygon(data = nconvex_25, alpha = lineAlpha, color = lineColor, size = 1.5, fill = NA, linetype = 2) +
@@ -988,8 +988,8 @@ ggsave(filename = "Plots/Measures.png",
 formantAlpha <- .20
 myPal <- c("#1279B5","#2D2D37")
 
-Pitch_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""), 
-                              pattern = ".Pitch", ignore.case = T) %>%
+Pitch_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""),
+                          pattern = ".Pitch", ignore.case = T) %>%
     paste("Prepped Data/Example Data/",., sep = "") %>%
     read.delim(., header = F) %>%
     dplyr::rename(Pitch = V1) %>%
@@ -1171,7 +1171,7 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
            height = 6,
            width = 8,
            units = "in",
-           scale = .9)
+           scale = .85)
   
 ```
 
