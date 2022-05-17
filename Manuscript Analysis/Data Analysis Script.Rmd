@@ -22,6 +22,7 @@ library(gt)
 library(patchwork)
 library(ks)
 library(emuR) # install.packages('emuR')
+library(mslTools) # devtools::install_github("AustinRThompson/mslTools")
 
 ```
 
@@ -1183,6 +1184,10 @@ plotData_Int <- AcousticData %>%
                 segMax = base::max(VAS, transAcc),
                 ratingAvg = mean(VAS, transAcc, na.rm = T),
                 Speaker = as.factor(Speaker),
+                Etiology = case_when(
+                  Etiology == "Ataxic" ~ "Ataxia",
+                  TRUE ~ as.character(Etiology)
+                ),
                 Etiology = as.factor(Etiology)) %>%
   arrange(segMax)
 
@@ -1216,35 +1221,18 @@ plot_Int <- ggplot(plotData_Int) +
   ylab("Speech Intelligibility") +
   ggtitle("Speech Intelligibility") +
   ylim(c(0,100))
-plot_Int
+
 
 myPal <- c("#1AAD77", "#1279B5", "#FFBF00", "#FD7853", "#BF3178")
 myShapes <- c(16, 18, 17, 15)
 
-scatter1 <- ggplot(plotData_Int,
+OT_VASscatter <- ggplot(plotData_Int,
                   aes(x = VAS,
                       y = transAcc,
                       color = Etiology,
                       shape = Etiology,
                       linetype = Etiology)) +
   geom_point() +
-  #geom_smooth(method = "lm", se = F) +
-  geom_abline(intercept = 0, slope = 1) +
-  coord_cartesian(xlim = c(0,100), ylim = c(0,100)) +
-  labs(x = "Intelligibility (VAS)", y = "Intelligibility (OT)") +
-  scale_color_manual(values = myPal) +
-  scale_shape_manual(values = myShapes) +
-  theme_classic() +
-  theme(aspect.ratio=1,
-        legend.position="right")
-
-scatter2 <- ggplot(plotData_Int,
-                  aes(x = VAS,
-                      y = transAcc,
-                      color = Etiology,
-                      shape = Etiology,
-                      linetype = Etiology)) +
-  #geom_point() +
   geom_smooth(method = "lm", se = F) +
   geom_abline(intercept = 0, slope = 1) +
   coord_cartesian(xlim = c(0,100), ylim = c(0,100)) +
@@ -1255,17 +1243,11 @@ scatter2 <- ggplot(plotData_Int,
   theme(aspect.ratio=1,
         legend.position="right")
 
-combinedScatter <- ggarrange(scatter1,
-                             scatter2,
-                             common.legend = F,
-                             ncol = 2,
-                             nrow = 1)
-combinedScatter
 
 ggsave(filename = "Plots/OT and VAS Scatterplot.png",
-       plot = combinedScatter,
-       height = 2,
-       width = 6,
+       plot = OT_VASscatter,
+       height = 3.25,
+       width = 4,
        units = "in",
        scale = 1)
 
@@ -1300,6 +1282,7 @@ VSA <- modelFigureData %>%
       linetype = IntType) +
   geom_point() +
   geom_smooth(method = "lm", se = T, fill = "light grey") +
+  geom_smooth(method = "lm", se = F) +
   xlab(expression("VSA (Bark"^2*")")) +
   ylab(ylabel) +
   coord_cartesian(ylim = c(0,100)) +
@@ -1321,6 +1304,7 @@ disp <- modelFigureData %>%
       linetype = IntType) +
   geom_point() +
   geom_smooth(method = "lm", se = T, fill = "light grey") +
+  geom_smooth(method = "lm", se = F) +
   xlab("Corner Dispersion (Bark)") +
   ylab(ylabel) +
   coord_cartesian(ylim = c(0,100)) +
@@ -1341,6 +1325,7 @@ Hull <- modelFigureData %>%
       linetype = IntType) +
   geom_point() +
   geom_smooth(method = "lm", se = T, fill = "light grey") +
+  geom_smooth(method = "lm", se = F) +
   xlab(expression("VSA"[Hull]*" (Bark"^2*")")) +
   ylab(ylabel) +
   coord_cartesian(ylim = c(0,100)) +
@@ -1361,6 +1346,7 @@ vsd25 <- modelFigureData %>%
       linetype = IntType) +
   geom_point() +
   geom_smooth(method = "lm", se = T, fill = "light grey") +
+  geom_smooth(method = "lm", se = F) +
   xlab(expression("VSD"[25]*" (Bark"^2*")")) +
   ylab(ylabel) +
   coord_cartesian(ylim = c(0,100)) +
@@ -1381,6 +1367,7 @@ vsd75 <- modelFigureData %>%
       linetype = IntType) +
   geom_point() +
   geom_smooth(method = "lm", se = T, fill = "light grey") +
+  geom_smooth(method = "lm", se = F) +
   xlab(expression("VSD"[75]*" (Bark"^2*")")) +
   ylab(ylabel) +
   coord_cartesian(ylim = c(0,100)) +
@@ -1408,7 +1395,7 @@ ggsave("Plots/ModelFigure.png", scatter,
 
 ## Filtering at Different Levels
 ```{r}
-text_x <- 13
+text_x <- 12.5
 text_y <- 8.5
 xlims <- c(16,5)
 ylims <- c(9,1)
@@ -1488,13 +1475,14 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
                      color = "#1279B5",
                      fill = NA,
                      size = 1.5) +
-        annotate("text", x = text_x, y = text_y, label = paste("Hull = ",round(Hull_b,3))) +
+        annotate("text", x = text_x, y = text_y, label = paste("Hull =",round(Hull_b,2))) +
         scale_y_reverse() +
         scale_x_reverse() +
         xlim(xlims) +
         ylim(ylims) +
-        theme_classic() + labs(title = paste("VSA Hull - 2 SD")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
-        theme(plot.title = element_text(hjust = 0.5))
+        theme_classic() + labs(title = paste("2 SD")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
+        theme(plot.title = element_text(hjust = 0.5),
+              aspect.ratio = 1)
       hullPlot_2
       
 # Hull - 2.5 SD ----
@@ -1573,13 +1561,14 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
                      color = "#1279B5",
                      fill = NA,
                      size = 1.5) +
-        annotate("text", x = text_x, y = text_y, label = paste("Hull = ",round(Hull_b,3))) +
+        annotate("text", x = text_x, y = text_y, label = paste("Hull =",round(Hull_b,2))) +
         scale_y_reverse() +
         scale_x_reverse() +
         xlim(xlims) +
         ylim(ylims) +
-        theme_classic() + labs(title = paste("VSA Hull - 2.5 SD")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
-        theme(plot.title = element_text(hjust = 0.5))
+        theme_classic() + labs(title = paste("2.5 SD")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
+        theme(plot.title = element_text(hjust = 0.5),
+              aspect.ratio = 1)
       hullPlot_2.5
       
 # Hull - 3 SD ----
@@ -1658,13 +1647,14 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
                      color = "#1279B5",
                      fill = NA,
                      size = 1.5) +
-        annotate("text", x = text_x, y = text_y, label = paste("Hull = ",round(Hull_b,3))) +
+        annotate("text", x = text_x, y = text_y, label = paste("Hull =",round(Hull_b,2))) +
         scale_y_reverse() +
         scale_x_reverse() +
         xlim(xlims) +
         ylim(ylims) +
-        theme_classic() + labs(title = paste("VSA Hull - 3 SD")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
-        theme(plot.title = element_text(hjust = 0.5))
+        theme_classic() + labs(title = paste("3 SD")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
+        theme(plot.title = element_text(hjust = 0.5),
+              aspect.ratio = 1)
       hullPlot_3
       
 # Hull - 1.5 SD ----
@@ -1743,13 +1733,14 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
                      color = "#1279B5",
                      fill = NA,
                      size = 1.5) +
-        annotate("text", x = text_x, y = text_y, label = paste("Hull = ",round(Hull_b,3))) +
+        annotate("text", x = text_x, y = text_y, label = paste("Hull =",round(Hull_b,2))) +
         scale_y_reverse() +
         scale_x_reverse() +
         xlim(xlims) +
         ylim(ylims) +
-        theme_classic() + labs(title = paste("VSA Hull - 1.5 SD")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
-        theme(plot.title = element_text(hjust = 0.5))
+        theme_classic() + labs(title = paste("1.5 SD")) + xlab("F2 (Bark)") + ylab("F1 (Bark)") +
+        theme(plot.title = element_text(hjust = 0.5),
+              aspect.ratio = 1)
       hullPlot_1.5
       
 # Combined ----
@@ -1759,7 +1750,7 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
              height = 3,
              width= 9,
              units = "in",
-             scale = 1.25)
+             scale = .9)
       
 ```
 
