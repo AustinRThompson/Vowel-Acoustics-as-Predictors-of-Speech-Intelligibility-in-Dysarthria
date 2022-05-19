@@ -6,21 +6,21 @@ output: html_notebook
 This is the code for the statistical analysis for "Vowel Acoustics as Predictors of Speech Intelligibility in Dysarthria."
 
 # Loading Packages
-
+This block of code loads in the required packages for this script. In the #'s, I have provided to the code to install each package if needed.
 ```{r}
 
-library(rio)
-library(tidyverse)
+library(rio) # install.packages('rio')
+library(tidyverse) # install.packages('tidyverse')
 library(irr) # install.packages('irr')
-library(performance)
-library(car)
-library(ggpubr)
-library("Hmisc") # install.packages('Hmisc')
-library(ggridges)
+library(performance) # install.packages('performance')
+library(car) # install.packages('car')
+library(ggpubr) # install.packages('ggpubr')
+library(Hmisc) # install.packages('Hmisc')
+library(ggridges) # install.packages('ggridges')
 library(furniture) # install.packages('furniture')
-library(gt)
-library(patchwork)
-library(ks)
+library(gt) # install.packages('gt')
+library(patchwork) # install.packages('patchwork')
+library(ks) # install.packages('ks')
 library(emuR) # install.packages('emuR')
 library(mslTools) # devtools::install_github("AustinRThompson/mslTools")
 
@@ -30,23 +30,39 @@ library(mslTools) # devtools::install_github("AustinRThompson/mslTools")
 
 ```{r}
 
+# Reliability Data
 Reliability <- rio::import("Prepped Data/Reliability Data.csv")
-AcousticData <- rio::import("Prepped Data/AcousticMeasures.csv") %>%
-  dplyr::mutate(intDiff = VAS - transAcc)
 
-AcousticData <- AcousticData %>%
-  dplyr::filter(!grepl("_rel", Speaker)) %>%
-  dplyr::select(c(Speaker, Sex, Etiology, vowel_ED_b, VSA_b,
-                  Hull_b,Hull_bVSD_25, Hull_bVSD_50, Hull_bVSD_75,
-                  VAS, transAcc)) %>%
+# Speaker Data
+AcousticData <- rio::import("Prepped Data/AcousticMeasures.csv") %>%
+  dplyr::filter(!grepl("_rel", Speaker)) %>% # Filters out reliability data
+  dplyr::select(c(Speaker,
+                  Sex,
+                  Etiology,
+                  vowel_ED_b, # Corner Dispersion
+                  VSA_b, # Traditional VSA
+                  Hull_b, # VSA Hull
+                  Hull_bVSD_25, # VSD 25
+                  Hull_bVSD_75, # VSD 75
+                  VAS, # Intelligibility (VAS)
+                  transAcc) # Intelligibility (OT)
+                ) %>% 
+  # The following code ensure etiology, sex, and speaker are coded as factors
   dplyr::mutate(Etiology = as.factor(Etiology),
                 Sex = as.factor(Sex),
                 Speaker = as.factor(Speaker))
 
+# Listener Data
 Listeners <- rio::import("Prepped Data/Listener_Demographics.csv") %>%
-  dplyr::select(!c(StartDate:proloficID, Q2.4_6_TEXT, Q3.2_8_TEXT, AudioCheck:EP3))
-
-Listeners$race[Listeners$Q3.3_7_TEXT == "Native American/ African amercing"] <- "Biracial or Multiracial"
+  dplyr::select(!c(StartDate:proloficID, # removes unwanted columns
+                   Q2.4_6_TEXT,
+                   Q3.2_8_TEXT,
+                   AudioCheck:EP3)) %>% 
+  # The follow code corrects for when a listener replied "Other" instead of the Biracial or Multiracial" response
+  dplyr::mutate(race = case_when(
+    Q3.3_7_TEXT == "Native American/ African amercing" ~ "Biracial or Multiracial",
+    TRUE ~ race
+  ))
 ```
 
 
@@ -77,23 +93,48 @@ Single_F2 <- irr::icc(F2_Rel, model = "twoway", type = "agreement", unit = "sing
 Average_F2 <- irr::icc(F2_Rel, model = "twoway", type = "agreement", unit = "average")
 
 ## Inter-rater reliability results and interpretation
-
-print(paste("Single ICC for F1 is ", round(Single_F1$value, digits = 3), ". ", 
-            "The 95% CI is [", round(Single_F1$lbound, digits = 3), " - ", round(Single_F1$ubound, digits = 3), "].", sep = ""))
-
-print(paste("Single ICC for F2 is ", round(Single_F2$value, digits = 3), ". ", 
-            "The 95% CI is [", round(Single_F2$lbound, digits = 3), " - ", round(Single_F2$ubound, digits = 3), "].", sep = ""))
-
-print(paste("Average ICC for F1 is ", round(Average_F1$value, digits = 3), ". ", 
-            "The 95% CI is [", round(Average_F1$lbound, digits = 3), " - ", round(Average_F1$ubound, digits = 3), "].", sep = ""))
-
-print(paste("Average ICC for F2 is ", round(Average_F2$value, digits = 3), ". ", 
-            "The 95% CI is [", round(Average_F2$lbound, digits = 3), " - ", round(Average_F2$ubound, digits = 3), "].", sep = ""))
-
-print("Thus, interrater reliability for the extracted F1 and F2 values from the vowel segments was good to excellent.")
+  print(paste("Single ICC for F1 is ",
+              round(Single_F1$value, digits = 3),
+              ". ", 
+              "The 95% CI is [",
+              round(Single_F1$lbound, digits = 3),
+              " - ",
+              round(Single_F1$ubound, digits = 3),
+              "].",
+              sep = ""))
+  
+  print(paste("Single ICC for F2 is ",
+              round(Single_F2$value, digits = 3),
+              ". ", 
+              "The 95% CI is [",
+              round(Single_F2$lbound, digits = 3),
+              " - ", round(Single_F2$ubound, digits = 3),
+              "].",
+              sep = ""))
+  
+  print(paste("Average ICC for F1 is ",
+              round(Average_F1$value, digits = 3),
+              ". ", 
+              "The 95% CI is [",
+              round(Average_F1$lbound, digits = 3),
+              " - ",
+              round(Average_F1$ubound, digits = 3),
+              "].",
+              sep = ""))
+  
+  print(paste("Average ICC for F2 is ",
+              round(Average_F2$value, digits = 3),
+              ". ", 
+              "The 95% CI is [",
+              round(Average_F2$lbound, digits = 3),
+              " - ",
+              round(Average_F2$ubound, digits = 3),
+              "].",
+              sep = ""))
+  
+  print("Thus, interrater reliability for the extracted F1 and F2 values from the vowel segments was good to excellent.")
 
 ## Removing extra data frames from environment
-
 rm(F1_Rel, F2_Rel, Reliability, Single_F1, Single_F2, Average_F1, Average_F2)
 
 ```
@@ -104,20 +145,24 @@ rm(F1_Rel, F2_Rel, Reliability, Single_F1, Single_F2, Average_F1, Average_F2)
 ## Correlations
 
 ```{r}
+# Creates the correlation matrix
 CorrMatrix <- AcousticData %>%
   dplyr::select(VSA_b, vowel_ED_b, Hull_b, Hull_bVSD_25, Hull_bVSD_75, VAS, transAcc) %>%
   as.matrix() %>%
   Hmisc::rcorr()
+CorrMatrix
 
+# Identifies significant correlations
 CorrMatrixP <- CorrMatrix$P < .05
 
-CorrMatrix <- CorrMatrix$r
-
+# Pulls out two example correlations to be specified in the manuscript
 stats::cor.test(AcousticData$VSA_b, AcousticData$vowel_ED_b, method = "pearson")
 stats::cor.test(AcousticData$Hull_b, AcousticData$Hull_bVSD_25, method = "pearson")
 
-
+# Saves the correlation matrix to the "Tables" folder
 write.csv(CorrMatrix, file = "Tables/Correlation Matrix.csv")
+
+# Removes unwated variables
 rm(CorrMatrix)
 
 ```
@@ -129,15 +174,12 @@ rm(CorrMatrix)
 ```{r}
 
 # Specifying Model 1
-
 OT_Model1 <- lm(transAcc ~ Hull_bVSD_25, data = AcousticData)
 
 ## Model 1 Assumptions 
-
 performance::check_model(OT_Model1)
 
 ## Model 1 Summary
-
 summary(OT_Model1)
 
 ```
@@ -146,42 +188,34 @@ summary(OT_Model1)
 ```{r}
 
 ## Specifying Model 2
-
 OT_Model2 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75, data = AcousticData)
 
 ## Model 2 Assumption Check
-
 performance::check_model(OT_Model2)
 
 ## Model 2 Summary
-
 summary(OT_Model2)
 
 ## Model 1 and Model 2 Comparison
-
 anova(OT_Model1, OT_Model2)
 
 ```
 
 ### Model 3a
+
 ```{r}
 
 ## Specifying Model 3
-
 OT_Model3a <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b, data = AcousticData)
 
 ## Model 3 Assumption Check
-
 performance::check_model(OT_Model3a)
 performance::check_collinearity(OT_Model3a)
 
-
 ## Model 3 Summary
-
 summary(OT_Model3a)
 
 ## Model 2 and Model 3 Comparison
-
 anova(OT_Model2, OT_Model3a)
 
 ```
@@ -481,8 +515,6 @@ gtData <- AcousticData %>%
                    Hull_sd = sd(Hull_b, na.rm =T),
                    VSD25_mean = mean(Hull_bVSD_25, na.rm =T),
                    VSD25_sd = sd(Hull_bVSD_25, na.rm =T),
-                   VSD50_mean = mean(Hull_bVSD_50, na.rm =T),
-                   VSD50_sd = sd(Hull_bVSD_50, na.rm =T),
                    VSD75_mean = mean(Hull_bVSD_75, na.rm =T),
                    VSD75_sd = sd(Hull_bVSD_75, na.rm =T),
                    VAS_mean = mean(VAS, na.rm =T),
