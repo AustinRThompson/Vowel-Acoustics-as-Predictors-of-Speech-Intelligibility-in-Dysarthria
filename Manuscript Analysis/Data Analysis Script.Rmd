@@ -27,7 +27,6 @@ library(mslTools) # devtools::install_github("AustinRThompson/mslTools")
 ```
 
 # Upload Datasets
-
 ```{r}
 
 # Reliability Data
@@ -67,7 +66,6 @@ Listeners <- rio::import("Prepped Data/Listener_Demographics.csv") %>%
 
 
 # Inter-rater Reliability
-
 Two raters (the first two authors) completed vowel segmentation for the speakers. To calculate inter-rater reliability, 20% of the speakers were segmented again by the other rater. Two-way intraclass coefficients were computed for the extracted F1 and F2 from the temporal midpoint of the vowel segments. Since only one set of ratings will be used in the data analysis, we focus on the single ICC results and interpretation. However, we also report the average ICC values to be comprehensive.
 
 ```{r}
@@ -143,7 +141,6 @@ rm(F1_Rel, F2_Rel, Reliability, Single_F1, Single_F2, Average_F1, Average_F2)
 # Descriptive Statistics
 
 ## Correlations
-
 ```{r}
 # Creates the correlation matrix
 CorrMatrix <- AcousticData %>%
@@ -202,20 +199,20 @@ anova(OT_Model1, OT_Model2)
 ```
 
 ### Model 3a
-
+In this model, VSD25 was found to have a VIF value > 5. Therefore, Model 3b was created with VSD25 removed.
 ```{r}
 
-## Specifying Model 3
+## Specifying Model 3a
 OT_Model3a <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b, data = AcousticData)
 
-## Model 3 Assumption Check
+## Model 3a Assumption Check
 performance::check_model(OT_Model3a)
 performance::check_collinearity(OT_Model3a)
 
-## Model 3 Summary
+## Model 3a Summary
 summary(OT_Model3a)
 
-## Model 2 and Model 3 Comparison
+## Model 2 and Model 3a Comparison
 anova(OT_Model2, OT_Model3a)
 
 ```
@@ -223,18 +220,14 @@ anova(OT_Model2, OT_Model3a)
 ### Model 3b
 ```{r}
 
-## Specifying Model 3
-
+## Specifying Model 3b
 OT_Model3b <- lm(transAcc ~ Hull_bVSD_75 + Hull_b, data = AcousticData)
 
-## Model 3 Assumption Check
-
+## Model 3b Assumption Check
 performance::check_model(OT_Model3b)
 performance::check_collinearity(OT_Model3b)
 
-
 ## Model 3 Summary
-
 summary(OT_Model3b)
 
 ```
@@ -243,20 +236,16 @@ summary(OT_Model3b)
 ```{r}
 
 ## Specifying Model 4
-
 OT_Model4 <- lm(transAcc ~ Hull_bVSD_75 + Hull_b + VSA_b, data = AcousticData)
 
 ## Model 4 Assumption Check
-
 performance::check_model(OT_Model4)
 performance::check_collinearity(OT_Model4)
 
 ## Model 4 Summary
-
 summary(OT_Model4)
 
-## Model 3 and Model 4 Comparison
-
+## Model 3b and Model 4 Comparison
 anova(OT_Model3b, OT_Model4)
 
 ```
@@ -265,39 +254,31 @@ anova(OT_Model3b, OT_Model4)
 ```{r}
 
 ## Specifying Model 5
-
 OT_Model5 <- lm(transAcc ~ Hull_bVSD_75 + VSA_b + vowel_ED_b, data = AcousticData)
 
-## Model 4 Assumption Check
-
+## Model 5 Assumption Check
 performance::check_model(OT_Model5)
 performance::check_collinearity(OT_Model5)
 
-## Model 4 Summary
-
+## Model 5 Summary
 summary(OT_Model5)
 
-## Model 3 and Model 4 Comparison
-
+## Model 4 and Model 5 Comparison
 anova(OT_Model4, OT_Model5)
 
 ```
 
 
 ### Final Model
-
 ```{r}
 
 ## Specifying Final Model
-
 OT_Model_final <- lm(transAcc ~ VSA_b, data = AcousticData)
 
 ## Final Model Assumption Check
-
 performance::check_model(OT_Model_final)
 
 ## Final Model Summary
-
 summary(OT_Model_final)
 confint(OT_Model_final)
 
@@ -309,15 +290,12 @@ confint(OT_Model_final)
 ```{r}
 
 # Specifying Model 1
-
 VAS_Model1 <- lm(VAS ~ Hull_bVSD_25, data = AcousticData)
 
 ## Model 1 Assumptions 
-
 performance::check_model(VAS_Model1)
 
 ## Model 1 Summary
-
 summary(VAS_Model1)
 
 ```
@@ -326,19 +304,15 @@ summary(VAS_Model1)
 ```{r}
 
 ## Specifying Model 2
-
 VAS_Model2 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75, data = AcousticData)
 
 ## Model 2 Assumption Check
-
 performance::check_model(VAS_Model2)
 
 ## Model 2 Summary
-
 summary(VAS_Model2)
 
 ## Model 1 and Model 2 Comparison
-
 anova(VAS_Model1, VAS_Model2)
 
 ```
@@ -346,21 +320,17 @@ anova(VAS_Model1, VAS_Model2)
 ### Model 3a
 ```{r}
 
-## Specifying Model 3
-
+## Specifying Model 3a
 VAS_Model3a <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b, data = AcousticData)
 
-## Model 3 Assumption Check
-
+## Model 3a Assumption Check
 performance::check_model(VAS_Model3a)
 performance::check_collinearity(VAS_Model3a)
 
-## Model 3 Summary
-
+## Model 3a Summary
 summary(VAS_Model3a)
 
-## Model 2 and Model 3 Comparison
-
+## Model 2 and Model 3a Comparison
 anova(VAS_Model2, VAS_Model3a)
 
 ```
@@ -370,16 +340,13 @@ This model removes VSD25 because of it's high VIF value > 5.
 ```{r}
 
 ## Specifying Model 3b
-
 VAS_Model3b <- lm(VAS ~ Hull_bVSD_75 + Hull_b, data = AcousticData)
 
 ## Model 3 Assumption Check
-
 performance::check_model(VAS_Model3b)
 performance::check_collinearity(VAS_Model3b)
 
 ## Model 3 Summary
-
 summary(VAS_Model3b)
 
 ```
@@ -387,20 +354,16 @@ summary(VAS_Model3b)
 ```{r}
 
 ## Specifying Model 4
-
 VAS_Model4 <- lm(VAS ~ Hull_bVSD_75 + Hull_b + VSA_b, data = AcousticData)
 
 ## Model 4 Assumption Check
-
 performance::check_model(VAS_Model4)
 performance::check_collinearity(VAS_Model4)
 
 ## Model 4 Summary
-
 summary(VAS_Model4)
 
-## Model 3 and Model 4 Comparison
-
+## Model 3b and Model 4 Comparison
 anova(VAS_Model3b, VAS_Model4)
 
 ```
@@ -409,19 +372,15 @@ anova(VAS_Model3b, VAS_Model4)
 ```{r}
 
 ## Specifying Model 5
-
 VAS_Model5 <- lm(VAS ~ Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b, data = AcousticData)
 
 ## Model 5 Assumption Check
-
 performance::check_model(VAS_Model5)
 
 ## Model 5 Summary
-
 summary(VAS_Model5)
 
 ## Model 4 and Model 5 Comparison
-
 anova(VAS_Model4, VAS_Model5)
 
 ```
@@ -431,15 +390,12 @@ anova(VAS_Model4, VAS_Model5)
 ```{r}
 
 ## Specifying Final Model
-
 VAS_Model_final <- lm(VAS ~ VSA_b, data = AcousticData)
 
 ## Final Model Assumption Check
-
 performance::check_model(VAS_Model_final)
 
 ## Final Model Summary
-
 summary(VAS_Model_final)
 confint(VAS_Model_final)
 
@@ -447,19 +403,16 @@ confint(VAS_Model_final)
 
 # Research Q2: Relationship between OT and VAS
 
-Model 1
+## Model 1
 ```{r}
 
 # Specify Model
-
 OT_VAS_model <- lm(transAcc ~ VAS*Etiology + VAS*Sex, data = AcousticData)
 
 # Assumption Check
-
 performance::check_model(OT_VAS_model)
 
 # Model Results
-
 summary(OT_VAS_model)
 
 ```
@@ -469,14 +422,11 @@ summary(OT_VAS_model)
 ```{r}
 
 # Specify Final Model
-
 OT_VAS_final <- lm(transAcc ~ VAS, data = AcousticData)
 
-confint(OT_VAS_final)
-
 # Model Results
-
 summary(OT_VAS_final)
+confint(OT_VAS_final)
 
 ```
 
@@ -486,7 +436,6 @@ Looking at corner dispersion as the sole predictor.
 ```{r}
 
 # Specify Final Model
-
 OT_cornDisp <- lm(transAcc ~ vowel_ED_b, data = AcousticData)
 summary(OT_cornDisp)
 
@@ -497,6 +446,7 @@ summary(VAS_cornDisp)
 # Manuscript Tables
 ## Descriptives Table
 ```{r}
+# Prepping the descriptives data as "gtData"
 gtData <- AcousticData %>%
   rbind(.,AcousticData %>%
           dplyr::mutate(Etiology = "All Etiologies")) %>%
@@ -537,6 +487,7 @@ gtData <- AcousticData %>%
   pivot_wider(names_from = Etiology, values_from = "Value") %>%
   dplyr::filter(Measure != "VSD50")
 
+# Creating and saving the gt table
 gtData %>%
   gt::gt(
     rowname_col = "Measure",
@@ -586,6 +537,8 @@ gtData %>%
   ) %>%
   gtsave("DescriptivesTable.html", path = "Tables")
 
+# Removing unwanted variables
+rm(gtData)
 ```
 
 ## OT Model
@@ -631,6 +584,7 @@ formantAlpha <- .95
 lineColor <- "white"
 lineAlpha <- .8
 
+## Loading example data ----
 vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
   dplyr::filter(Speaker == "AF8")
 
@@ -800,7 +754,6 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
                                         "i" = "#FFBF00",
                                         "u" = "#FD7853",
                                         "ʌ" = "#BF3178"))
-    CDplot
     
       rm(corner_dis, wedge)
       
@@ -852,7 +805,6 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
                                         "æ" = "#1279B5",
                                         "i" = "#FFBF00",
                                         "u" = "#FD7853"))
-    VSAplot
   
   rm(VSA_coords)
   
@@ -882,12 +834,10 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
                                  ylab("F1 (Bark)") +
       theme(plot.title = element_text(hjust = 0.5),
             aspect.ratio = 1)
-      hullPlot
     
   
 ## Vowel Space Density ----
 
-# Bark Normalized Density ----
 # selecting the bandwidth
 H_hpi <- ks::Hpi(x = Formants_PRAAT[,c("F2_b","F1_b")], pilot = "samse", pre = "scale", binned = T)
 
@@ -991,10 +941,8 @@ geom.text.size <- 2
                hjust = "center",
                color = "white",
                parse = TRUE)
-     VSDplot
 
-# Combined Plot
-     
+## Combining the Plots ----
      row1 <- VSAplot + CDplot +
         patchwork::plot_layout(guides = 'collect',
                          ncol = 2) & theme(legend.position = 'right')
@@ -1007,12 +955,39 @@ geom.text.size <- 2
      
      rm(row1, row2)
 
+## Saving the plot ----
 ggsave(filename = "Plots/Measures.png",
        plot = measuresPlot,
        height = 5.5,
        width = 6,
        scale = .8)
 
+# Removing unwanted variables
+     rm(VSAplot,
+        VSDplot,
+        hullPlot,
+        CDplot,
+        convexCoords,
+        formantAlpha,
+        formantColor,
+        geom.text.size,
+        lineAlpha,
+        lineColor,
+        r,
+        rf,
+        H_hpi,
+        k,
+        mat.melted,
+        nconvex_25,
+        nconvex_75,
+        nVSD_25,
+        nVSD_75,
+        convex,
+        vowelData,
+        Formants_PRAAT,
+        measuresPlot,
+        plotData)
+     
 ```
 
 ## Filtering Process
@@ -1204,6 +1179,18 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
            width = 8,
            units = "in",
            scale = .85)
+    
+    rm(filteredPlot,
+       Pitch_PRAAT,
+       Formants_PRAAT,
+       f1,
+       f2,
+       f3,
+       f4,
+       f5,
+       formantAlpha,
+       myPal,
+       plotData)
   
 ```
 
@@ -1785,35 +1772,34 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
              scale = .9)
       
 ```
-
-# Listener Demographic Information
+# Demographic Info
+## Listeners
 ```{r}
 
-ListenerDemo <- Listeners %>%
+Listeners %>%
   furniture::table1(age, gender, race, ethnicity)
 
-ListenerDemo
+rm(Listeners)
 
 ```
 
-# Speaker Demographics
-
+## Speakers
 ```{r}
-
-SpeakerDemo <- AcousticData %>%
-  dplyr::select(c(Speaker, Sex, Etiology))
 
 Ages <- rio::import("Prepped Data/Speaker Ages.xlsx")
 
-SpeakerDemo <- full_join(SpeakerDemo, Ages, by = "Speaker")
+SpeakerDemo <- AcousticData %>%
+  dplyr::select(c(Speaker, Sex, Etiology)) %>%
+  full_join(., Ages, by = "Speaker")
 
-SpeakerDemoInfo <- SpeakerDemo %>%
+SpeakerDemo %>%
   furniture::table1(Sex, Etiology, Age, na.rm = F)
-
-SpeakerDemoInfo
 
 SpeakerDemo %>%
   dplyr::summarize(mean_age = mean(Age, na.rm = T), age_sd = sd(Age, na.rm = T), age_range = range(Age, na.rm = T))
+
+# Removing unwanted variables
+rm(Ages, SpeakerDemo)
 
 ```
 
