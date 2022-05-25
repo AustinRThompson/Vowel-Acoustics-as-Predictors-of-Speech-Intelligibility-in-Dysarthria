@@ -22,7 +22,6 @@ library(gt) # install.packages('gt')
 library(patchwork) # install.packages('patchwork')
 library(ks) # install.packages('ks')
 library(emuR) # install.packages('emuR')
-library(mslTools) # devtools::install_github("AustinRThompson/mslTools")
 
 ```
 
