@@ -1778,35 +1778,33 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
 ```{r}
 
 # Transforming the Data to Long format
-AcousticDataLong <- tidyr::pivot_longer(AcousticData,
+plotData <- tidyr::pivot_longer(AcousticData,
                       cols = VAS:transAcc,
                       names_to = "Intelligibility_Measure",
-                      values_to = "Intelligibility_Value")
-
-AcousticDataLong <- tidyr::pivot_longer(AcousticDataLong,
-                                        cols = vowel_ED_b:Hull_bVSD_75,
-                                        names_to = "Acoustic_Measure",
-                                        values_to = "Acoustic_Value")
-
-AcousticDataLong <- AcousticDataLong %>%
+                      values_to = "Intelligibility_Value") %>%
+  tidyr::pivot_longer(.,
+                      cols = vowel_ED_b:Hull_bVSD_75,
+                      names_to = "Acoustic_Measure",
+                      values_to = "Acoustic_Value") %>%
   dplyr::mutate(Etiology = case_when(
-                  Etiology == "Ataxic" ~ "Ataxia",
-                  TRUE ~ as.character(Etiology)
-                ),
-                Etiology = as.factor(Etiology),
-                Etiology = fct_relevel(Etiology, c("Ataxia", "ALS", "HD", "PD"))) %>%
+    Etiology == "Ataxic" ~ "Ataxia",
+    TRUE ~ as.character(Etiology)
+    ),
+    Etiology = as.factor(Etiology),
+    Etiology = fct_relevel(Etiology, c("Ataxia", "ALS", "HD", "PD"))) %>%
   dplyr::mutate(Acoustic_Measure = case_when(
-    Acoustic_Measure == "Hull_bVSD_25" ~ "VSD 25",
-    Acoustic_Measure == "Hull_bVSD_75" ~ "VSD 75",
-    Acoustic_Measure == "Hull_b" ~ "Vowel Space Hull",
-    Acoustic_Measure == "VSA_b" ~ "Vowel Space Area",
-    Acoustic_Measure == "vowel_ED_b" ~ "Corner Dispersion"),
+    Acoustic_Measure == "Hull_bVSD_25" ~ "VSD_25",
+    Acoustic_Measure == "Hull_bVSD_75" ~ "VSD_75",
+    Acoustic_Measure == "Hull_b" ~ "VSA_Hull",
+    Acoustic_Measure == "VSA_b" ~ "VSA",
+    Acoustic_Measure == "vowel_ED_b" ~ "Corner_Dispersion"
+    ),
     Acoustic_Measure = as.factor(Acoustic_Measure),
-                Acoustic_Measure = fct_relevel(Acoustic_Measure, c("VSD 25", 
-                                                                   "VSD 75",
-                                                                   "Vowel Space Hull",
-                                                                   "Vowel Space Area",
-                                                                   "Corner Dispersion"))) %>%
+                Acoustic_Measure = fct_relevel(Acoustic_Measure, c("VSA",
+                                                                   "Corner_Dispersion",
+                                                                   "VSA_Hull",
+                                                                   "VSD_25", 
+                                                                   "VSD_75"))) %>%
   dplyr::mutate(Intelligibility_Measure = case_when(Intelligibility_Measure == "transAcc" ~ "OT",
                                                     Intelligibility_Measure == "VAS" ~ "VAS"))
                 
@@ -1814,10 +1812,19 @@ AcousticDataLong <- AcousticDataLong %>%
 
 myPal <- c("#1AAD77", "#1279B5", "#FFBF00", "#FD7853", "#BF3178")
 myShapes <- c(16, 18, 17, 15)
+my_labeller <- as_labeller(c(`VSA` = "VSA",
+                             `Corner_Dispersion` = "Corner~Dispersion",
+                             `VSA_Hull` = "VSA[Hull]",
+                             `VSD_25` = "VSD[25]",
+                             `VSD_75` = "VSD[75]",
+                             `OT` = "OT",
+                             `VAS` = "VAS"),
+                           default = label_parsed)
 
 # Visualizing relationships between acoustic measures and intelligibility by etiology
 
-AcousticDataLong %>%
+
+plotData %>%
   ggplot() +
   aes(x = Acoustic_Value,
       y = Intelligibility_Value,
@@ -1828,13 +1835,21 @@ AcousticDataLong %>%
   geom_smooth(method = "lm", se = F) +
   facet_grid(rows = vars(Intelligibility_Measure),
              cols = vars(Acoustic_Measure),
-             scales = "free") +
+             scales = "free",
+             labeller = my_labeller) +
   scale_color_manual(values = myPal) +
   scale_shape_manual(values = myShapes) +
-  labs(x = "Vowel Acoustic Measures", y = "Intelligibility") +
-  theme_bw()
+  labs(x = NULL,
+       y = "Intelligibility") +
+  theme_bw() +
+  theme(aspect.ratio = 1)
 
-ggsave("Plots/Etiology_Effects_Intelligibility_plot.png", plot = last_plot(), height = 5, width = 10, units = "in")
+ggsave("Plots/Etiology_Effects_Intelligibility_plot.png",
+       plot = last_plot(),
+       height = 4,
+       width = 11,
+       units = "in",
+       scale = .7)
 
 ```
 
