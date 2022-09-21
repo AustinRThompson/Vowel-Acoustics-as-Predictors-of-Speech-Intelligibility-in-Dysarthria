@@ -1772,6 +1772,74 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
              scale = .9)
       
 ```
+
+## Scatterplot facet by acoustic measure and intelligibility measure. Displayed by eitology
+
+```{r}
+
+# Transforming the Data to Long format
+AcousticDataLong <- tidyr::pivot_longer(AcousticData,
+                      cols = VAS:transAcc,
+                      names_to = "Intelligibility_Measure",
+                      values_to = "Intelligibility_Value")
+
+AcousticDataLong <- tidyr::pivot_longer(AcousticDataLong,
+                                        cols = vowel_ED_b:Hull_bVSD_75,
+                                        names_to = "Acoustic_Measure",
+                                        values_to = "Acoustic_Value")
+
+AcousticDataLong <- AcousticDataLong %>%
+  dplyr::mutate(Etiology = case_when(
+                  Etiology == "Ataxic" ~ "Ataxia",
+                  TRUE ~ as.character(Etiology)
+                ),
+                Etiology = as.factor(Etiology),
+                Etiology = fct_relevel(Etiology, c("Ataxia", "ALS", "HD", "PD"))) %>%
+  dplyr::mutate(Acoustic_Measure = case_when(
+    Acoustic_Measure == "Hull_bVSD_25" ~ "VSD 25",
+    Acoustic_Measure == "Hull_bVSD_75" ~ "VSD 75",
+    Acoustic_Measure == "Hull_b" ~ "Vowel Space Hull",
+    Acoustic_Measure == "VSA_b" ~ "Vowel Space Area",
+    Acoustic_Measure == "vowel_ED_b" ~ "Corner Dispersion"),
+    Acoustic_Measure = as.factor(Acoustic_Measure),
+                Acoustic_Measure = fct_relevel(Acoustic_Measure, c("VSD 25", 
+                                                                   "VSD 75",
+                                                                   "Vowel Space Hull",
+                                                                   "Vowel Space Area",
+                                                                   "Corner Dispersion"))) %>%
+  dplyr::mutate(Intelligibility_Measure = case_when(Intelligibility_Measure == "transAcc" ~ "OT",
+                                                    Intelligibility_Measure == "VAS" ~ "VAS"))
+                
+# Colors and Shapes for plot
+
+myPal <- c("#1AAD77", "#1279B5", "#FFBF00", "#FD7853", "#BF3178")
+myShapes <- c(16, 18, 17, 15)
+
+# Visualizing relationships between acoustic measures and intelligibility by etiology
+
+AcousticDataLong %>%
+  ggplot() +
+  aes(x = Acoustic_Value,
+      y = Intelligibility_Value,
+      color = Etiology,
+      shape = Etiology,
+      linetype = Etiology) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  facet_grid(rows = vars(Intelligibility_Measure),
+             cols = vars(Acoustic_Measure),
+             scales = "free") +
+  scale_color_manual(values = myPal) +
+  scale_shape_manual(values = myShapes) +
+  labs(x = "Vowel Acoustic Measures", y = "Intelligibility") +
+  theme_bw()
+
+ggsave("Plots/Etiology_Effects_Intelligibility_plot.png", plot = last_plot(), height = 5, width = 10, units = "in")
+
+```
+
+
+
 # Demographic Info
 ## Listeners
 ```{r}

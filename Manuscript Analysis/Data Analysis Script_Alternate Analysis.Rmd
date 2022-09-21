@@ -26,6 +26,7 @@ library(emuR) # install.packages('emuR')
 ```
 
 # Upload Datasets
+
 ```{r}
 
 # Reliability Data
@@ -67,93 +68,38 @@ Listeners <- rio::import("Prepped Data/Listener_Demographics.csv") %>%
 
 In our primary analysis, the VAS and OT models only included the vowel acoustic measures. Here, we are testing whether there are any interaction effects.
 
-## OT Models
-
-### Model 1a
+## Data Visualization
 
 ```{r}
 
-# Specifying Model 1a
-OT_Model1a <- lm(transAcc ~ Hull_bVSD_25*Etiology, data = AcousticData)
+# Transforming the Data to Long format
+AcousticDataLong <- tidyr::pivot_longer(AcousticData,
+                      cols = VAS:transAcc,
+                      names_to = "Intelligibility_Measure",
+                      values_to = "Intelligibility_Value")
 
-## Model 1a Assumptions 
-performance::check_model(OT_Model1a)
+AcousticDataLong <- tidyr::pivot_longer(AcousticDataLong,
+                                        cols = vowel_ED_b:Hull_bVSD_75,
+                                        names_to = "Acoustic_Measure",
+                                        values_to = "Acoustic_Value")
 
-## Model 1a Summary
-summary(OT_Model1a)
+#Vidualizing relationships between acoustic measures and intelligibility by etiology
 
-```
+AcousticDataLong %>%
+  ggplot() +
+  aes(x = Acoustic_Value,
+      y = Intelligibility_Value,
+      color = Etiology) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  facet_grid(rows = vars(Intelligibility_Measure),
+             cols = vars(Acoustic_Measure),
+             scales = "free") +
+  theme_bw()
 
-
-### Model 2a
-
-```{r}
-
-# Specifying Model 2a
-OT_Model2a <- lm(transAcc ~ Hull_bVSD_25*Etiology + Hull_bVSD_75*Etiology, data = AcousticData)
-
-## Model 2a Assumptions 
-performance::check_model(OT_Model2a)
-
-## Model 2a Summary
-summary(OT_Model2a)
-
-## Model 1a and Model 2a Comparison
-anova(OT_Model1a, OT_Model2a)
 
 ```
-### Model 3a
 
-```{r}
-
-# Specifying Model 3a
-OT_Model3a <- lm(transAcc ~ Hull_bVSD_25*Etiology + Hull_bVSD_75*Etiology + Hull_b*Etiology, data = AcousticData)
-
-## Model 3a Assumptions 
-performance::check_model(OT_Model3a)
-
-## Model 2a Summary
-summary(OT_Model3a)
-
-## Model 1a and Model 2a Comparison
-anova(OT_Model2a, OT_Model3a)
-
-```
-### Model 4a
-
-```{r}
-
-# Specifying Model 3a
-OT_Model4a <- lm(transAcc ~ Hull_bVSD_25*Etiology + Hull_bVSD_75*Etiology + Hull_b*Etiology + VSA_b*Etiology, data = AcousticData)
-
-## Model 3a Assumptions 
-performance::check_model(OT_Model4a)
-
-## Model 2a Summary
-summary(OT_Model4a)
-
-## Model 1a and Model 2a Comparison
-anova(OT_Model3a, OT_Model4a)
-
-```
-### Model 5a
-
-```{r}
-
-## Specifying Model 5a
-OT_Model5a <- lm(transAcc ~ Hull_bVSD_25*Etiology + Hull_bVSD_75*Etiology + Hull_b*Etiology + VSA_b*Etiology + vowel_ED_b*Etiology, data = AcousticData)
-
-## Model 5a Assumption Check
-performance::check_model(OT_Model5a)
-#performance::check_collinearity(OT_Model5)
-
-## Model 5 Summary
-summary(OT_Model5a)
-
-## Model 4 and Model 5 Comparison
-anova(OT_Model4a, OT_Model5a)
-
-```
 
 
 # Alternate Analysis
