@@ -63,6 +63,99 @@ Listeners <- rio::import("Prepped Data/Listener_Demographics.csv") %>%
   ))
 ```
 
+# Interactions with Etiology
+
+In our primary analysis, the VAS and OT models only included the vowel acoustic measures. Here, we are testing whether there are any interaction effects.
+
+## OT Models
+
+### Model 1a
+
+```{r}
+
+# Specifying Model 1a
+OT_Model1a <- lm(transAcc ~ Hull_bVSD_25*Etiology, data = AcousticData)
+
+## Model 1a Assumptions 
+performance::check_model(OT_Model1a)
+
+## Model 1a Summary
+summary(OT_Model1a)
+
+```
+
+
+### Model 2a
+
+```{r}
+
+# Specifying Model 2a
+OT_Model2a <- lm(transAcc ~ Hull_bVSD_25*Etiology + Hull_bVSD_75*Etiology, data = AcousticData)
+
+## Model 2a Assumptions 
+performance::check_model(OT_Model2a)
+
+## Model 2a Summary
+summary(OT_Model2a)
+
+## Model 1a and Model 2a Comparison
+anova(OT_Model1a, OT_Model2a)
+
+```
+### Model 3a
+
+```{r}
+
+# Specifying Model 3a
+OT_Model3a <- lm(transAcc ~ Hull_bVSD_25*Etiology + Hull_bVSD_75*Etiology + Hull_b*Etiology, data = AcousticData)
+
+## Model 3a Assumptions 
+performance::check_model(OT_Model3a)
+
+## Model 2a Summary
+summary(OT_Model3a)
+
+## Model 1a and Model 2a Comparison
+anova(OT_Model2a, OT_Model3a)
+
+```
+### Model 4a
+
+```{r}
+
+# Specifying Model 3a
+OT_Model4a <- lm(transAcc ~ Hull_bVSD_25*Etiology + Hull_bVSD_75*Etiology + Hull_b*Etiology + VSA_b*Etiology, data = AcousticData)
+
+## Model 3a Assumptions 
+performance::check_model(OT_Model4a)
+
+## Model 2a Summary
+summary(OT_Model4a)
+
+## Model 1a and Model 2a Comparison
+anova(OT_Model3a, OT_Model4a)
+
+```
+### Model 5a
+
+```{r}
+
+## Specifying Model 5a
+OT_Model5a <- lm(transAcc ~ Hull_bVSD_25*Etiology + Hull_bVSD_75*Etiology + Hull_b*Etiology + VSA_b*Etiology + vowel_ED_b*Etiology, data = AcousticData)
+
+## Model 5a Assumption Check
+performance::check_model(OT_Model5a)
+#performance::check_collinearity(OT_Model5)
+
+## Model 5 Summary
+summary(OT_Model5a)
+
+## Model 4 and Model 5 Comparison
+anova(OT_Model4a, OT_Model5a)
+
+```
+
+
 # Alternate Analysis
 
 In this alternate analysis, we are looking at the relationship between these acoustic measures with speech intelligibility for the ALS/PD and the HD/Ataxic speakers separately. We create a new variable called Incoord, where the ALS/PD Speakers are set as the reference group (in order to compare to the Ataxic/HD Speaker Group). Group Comparisons, additional data visualizations, and further linear model comparisons are completed.

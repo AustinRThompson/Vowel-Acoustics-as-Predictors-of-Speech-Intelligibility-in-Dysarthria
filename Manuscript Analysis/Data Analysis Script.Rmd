@@ -166,16 +166,17 @@ rm(CorrMatrix)
 # Research Q1: Modeling Intelligibility
 
 ## Orthographic Transcriptions
-### Model 1
+
+### Model 1a
 ```{r}
 
-# Specifying Model 1
+# Specifying Model 1a
 OT_Model1 <- lm(transAcc ~ Hull_bVSD_25, data = AcousticData)
 
-## Model 1 Assumptions 
+## Model 1a Assumptions 
 performance::check_model(OT_Model1)
 
-## Model 1 Summary
+## Model 1a Summary
 summary(OT_Model1)
 
 ```
