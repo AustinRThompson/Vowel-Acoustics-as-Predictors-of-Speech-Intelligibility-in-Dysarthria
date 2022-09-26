@@ -21,6 +21,7 @@ library(furniture) # install.packages('furniture')
 library(gt) # install.packages('gt')
 library(patchwork) # install.packages('patchwork')
 library(ks) # install.packages('ks')
+library(sjPlot) # install.packages('sjPlot')
 library(emuR) # install.packages('emuR')
 
 ```
@@ -444,7 +445,7 @@ summary(VAS_cornDisp)
 
 ```
 # Manuscript Tables
-## Descriptives Table
+## Descriptives Table (Bark)
 ```{r}
 # Prepping the descriptives data as "gtData"
 gtData <- AcousticData %>%
@@ -536,6 +537,126 @@ gtData %>%
      Ataxic_sd = "SD"
   ) %>%
   gtsave("DescriptivesTable.html", path = "Tables")
+
+# Removing unwanted variables
+rm(gtData)
+```
+
+## Descriptives Table (Hz) - Supplemental Information
+```{r}
+gtData <- rio::import("Prepped Data/AcousticMeasures.csv") %>%
+  dplyr::filter(!grepl("_rel", Speaker)) %>% # Filters out reliability data
+  dplyr::select(c(Speaker,
+                  Sex,
+                  Etiology,
+                  vowel_ED, # Corner Dispersion
+                  VSA, # Traditional VSA
+                  Hull, # VSA Hull
+                  Hull_VSD_25, # VSD 25
+                  Hull_VSD_75, # VSD 75
+                  VAS, # Intelligibility (VAS)
+                  transAcc) # Intelligibility (OT)
+                ) %>% 
+  # The following code ensure etiology, sex, and speaker are coded as factors
+  dplyr::mutate(Etiology = as.factor(Etiology),
+                Sex = as.factor(Sex),
+                Speaker = as.factor(Speaker),
+                vowel_ED = vowel_ED,
+                VSA = VSA/1000,
+                Hull = Hull/1000,
+                Hull_VSD_25 = Hull_VSD_25/1000,
+                Hull_VSD_75 = Hull_VSD_75/1000)
+  
+# Prepping the descriptives data as "gtData"
+gtData <- gtData %>%
+  rbind(.,gtData %>%
+          dplyr::mutate(Etiology = "All Etiologies")) %>%
+  rbind(.,gtData %>%
+          rbind(.,gtData %>%
+          dplyr::mutate(Etiology = "All Etiologies")) %>%
+          dplyr::mutate(Sex = "All")) %>%
+  dplyr::mutate(Sex = as.factor(Sex),
+                Etiology = as.factor(Etiology)) %>%
+  dplyr::group_by(Sex, Etiology) %>%
+  dplyr::summarize(VSA_mean = mean(VSA, na.rm =T),
+                   VSA_sd = sd(VSA, na.rm = T),
+                   Disp_mean = mean(vowel_ED, na.rm =T),
+                   Disp_sd = sd(vowel_ED, na.rm =T),
+                   Hull_mean = mean(Hull, na.rm =T),
+                   Hull_sd = sd(Hull, na.rm =T),
+                   VSD25_mean = mean(Hull_VSD_25, na.rm =T),
+                   VSD25_sd = sd(Hull_VSD_25, na.rm =T),
+                   VSD75_mean = mean(Hull_VSD_75, na.rm =T),
+                   VSD75_sd = sd(Hull_VSD_75, na.rm =T),
+                   VAS_mean = mean(VAS, na.rm =T),
+                   VAS_sd = sd(VAS, na.rm =T),
+                   OT_mean = mean(transAcc, na.rm =T),
+                   OT_sd = sd(transAcc, na.rm =T)) %>%
+  pivot_longer(cols = VSA_mean:OT_sd, names_to = "Measure",
+               values_to = "Value") %>%
+  dplyr::mutate(Value = round(Value, digits = 2),
+                meanSD = ifelse(grepl("_mean",Measure),"M","sd"),
+                Measure = gsub("_mean","",Measure),
+                Measure = gsub("_sd","",Measure),
+                Etiology = paste(Etiology,meanSD, sep = "_"),
+                Sex = case_when(
+                  Sex == "All" ~ "All Speakers",
+                  Sex == "M" ~ "Male Speakers",
+                  Sex == "F" ~ "Female Speakers"
+                )) %>%
+  dplyr::select(!meanSD) %>%
+  pivot_wider(names_from = Etiology, values_from = "Value") %>%
+  dplyr::filter(Measure != "VSD50")
+
+# Creating and saving the gt table
+gtData %>%
+  gt::gt(
+    rowname_col = "Measure",
+    groupname_col = "Sex",
+  ) %>%
+  fmt_number(
+    columns = 'All Etiologies_M':PD_sd,
+    decimals = 2
+  ) %>%
+  tab_spanner(
+    label = "All Etiologies",
+    columns = c('All Etiologies_M', 'All Etiologies_sd')
+  ) %>%
+    tab_spanner(
+    label = "ALS",
+    columns = c(ALS_M, ALS_sd)
+  ) %>%
+  tab_spanner(
+    label = "PD",
+    columns = c(PD_M, PD_sd)
+  ) %>%
+  tab_spanner(
+    label = "HD",
+    columns = c(HD_M, HD_sd)
+  ) %>%
+  tab_spanner(
+    label = "Ataxic",
+    columns = c(Ataxic_M, Ataxic_sd)
+  ) %>%
+  gt::cols_move_to_start(
+    columns = c('All Etiologies_M','All Etiologies_sd')
+  ) %>%
+  row_group_order(
+    groups = c("All Speakers", "Female Speakers", "Male Speakers")
+    ) %>%
+  cols_label(
+     'All Etiologies_M' = "M",
+     'All Etiologies_sd' = "SD",
+     ALS_M = "M",
+     ALS_sd = "SD",
+     PD_M = "M",
+     PD_sd = "SD",
+     HD_M = "M",
+     HD_sd = "SD",
+     Ataxic_M = "M",
+     Ataxic_sd = "SD"
+  ) %>%
+  gtsave("DescriptivesTable_Hz.html", path = "Supplemental Information")
 
 # Removing unwanted variables
 rm(gtData)
