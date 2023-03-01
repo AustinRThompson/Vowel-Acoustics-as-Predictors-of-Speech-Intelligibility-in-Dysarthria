@@ -34,32 +34,29 @@ Reliability <- rio::import("Prepped Data/Reliability Data.csv")
 
 # Speaker Data
 AcousticData <- rio::import("Prepped Data/AcousticMeasures.csv") %>%
-  dplyr::filter(!grepl("_rel", Speaker)) %>% # Filters out reliability data
-  dplyr::select(c(Speaker,
+  dplyr::filter(!grepl("_rel", SpeakerID)) %>% # Filters out reliability data
+  dplyr::select(c(SpeakerID,
                   Sex,
                   Etiology,
-                  vowel_ED_b, # Corner Dispersion
+                  cornerDisp_b, # Corner Dispersion
                   VSA_b, # Traditional VSA
                   Hull_b, # VSA Hull
                   Hull_bVSD_25, # VSD 25
                   Hull_bVSD_75, # VSD 75
-                  VAS, # Intelligibility (VAS)
-                  transAcc) # Intelligibility (OT)
+                  Int_VAS, # Intelligibility (VAS)
+                  Int_OT) # Intelligibility (OT)
                 ) %>% 
   # The following code ensure etiology, sex, and speaker are coded as factors
   dplyr::mutate(Etiology = as.factor(Etiology),
                 Sex = as.factor(Sex),
-                Speaker = as.factor(Speaker))
+                SpeakerID = as.factor(SpeakerID))
 
 # Listener Data
-Listeners <- rio::import("Prepped Data/Listener_Demographics.csv") %>%
-  dplyr::select(!c(StartDate:proloficID, # removes unwanted columns
-                   Q2.4_6_TEXT,
-                   Q3.2_8_TEXT,
-                   AudioCheck:EP3)) %>% 
+Listeners <- rio::import("Prepped Data/ListenerData.csv") %>%
+  dplyr::select(!c(AudioCheck:EP3)) %>% 
   # The follow code corrects for when a listener replied "Other" instead of the Biracial or Multiracial" response
   dplyr::mutate(race = case_when(
-    Q3.3_7_TEXT == "Native American/ African amercing" ~ "Biracial or Multiracial",
+    race_other == "Native American/ African amercing" ~ "Biracial or Multiracial",
     TRUE ~ race
   ))
 ```
@@ -144,7 +141,13 @@ rm(F1_Rel, F2_Rel, Reliability, Single_F1, Single_F2, Average_F1, Average_F2)
 ```{r}
 # Creates the correlation matrix
 CorrMatrix <- AcousticData %>%
-  dplyr::select(VSA_b, vowel_ED_b, Hull_b, Hull_bVSD_25, Hull_bVSD_75, VAS, transAcc) %>%
+  dplyr::select(VSA_b,
+                cornerDisp_b,
+                Hull_b,
+                Hull_bVSD_25,
+                Hull_bVSD_75,
+                Int_VAS,
+                Int_OT) %>%
   as.matrix() %>%
   Hmisc::rcorr()
 CorrMatrix
@@ -153,7 +156,7 @@ CorrMatrix
 CorrMatrixP <- CorrMatrix$P < .05
 
 # Pulls out two example correlations to be specified in the manuscript
-stats::cor.test(AcousticData$VSA_b, AcousticData$vowel_ED_b, method = "pearson")
+stats::cor.test(AcousticData$VSA_b, AcousticData$cornerDisp_b, method = "pearson")
 stats::cor.test(AcousticData$Hull_b, AcousticData$Hull_bVSD_25, method = "pearson")
 
 # Saves the correlation matrix to the "Tables" folder
@@ -172,7 +175,7 @@ rm(CorrMatrix)
 ```{r}
 
 # Specifying Model 1a
-OT_Model1 <- lm(transAcc ~ Hull_bVSD_25, data = AcousticData)
+OT_Model1 <- lm(Int_OT ~ Hull_bVSD_25, data = AcousticData)
 
 ## Model 1a Assumptions 
 performance::check_model(OT_Model1)
@@ -186,7 +189,7 @@ summary(OT_Model1)
 ```{r}
 
 ## Specifying Model 2
-OT_Model2 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75, data = AcousticData)
+OT_Model2 <- lm(Int_OT ~ Hull_bVSD_25 + Hull_bVSD_75, data = AcousticData)
 
 ## Model 2 Assumption Check
 performance::check_model(OT_Model2)
@@ -204,7 +207,7 @@ In this model, VSD25 was found to have a VIF value > 5. Therefore, Model 3b was 
 ```{r}
 
 ## Specifying Model 3a
-OT_Model3a <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b, data = AcousticData)
+OT_Model3a <- lm(Int_OT ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b, data = AcousticData)
 
 ## Model 3a Assumption Check
 performance::check_model(OT_Model3a)
@@ -222,7 +225,7 @@ anova(OT_Model2, OT_Model3a)
 ```{r}
 
 ## Specifying Model 3b
-OT_Model3b <- lm(transAcc ~ Hull_bVSD_75 + Hull_b, data = AcousticData)
+OT_Model3b <- lm(Int_OT ~ Hull_bVSD_75 + Hull_b, data = AcousticData)
 
 ## Model 3b Assumption Check
 performance::check_model(OT_Model3b)
@@ -237,7 +240,7 @@ summary(OT_Model3b)
 ```{r}
 
 ## Specifying Model 4
-OT_Model4 <- lm(transAcc ~ Hull_bVSD_75 + Hull_b + VSA_b, data = AcousticData)
+OT_Model4 <- lm(Int_OT ~ Hull_bVSD_75 + Hull_b + VSA_b, data = AcousticData)
 
 ## Model 4 Assumption Check
 performance::check_model(OT_Model4)
@@ -255,7 +258,7 @@ anova(OT_Model3b, OT_Model4)
 ```{r}
 
 ## Specifying Model 5
-OT_Model5 <- lm(transAcc ~ Hull_bVSD_75 + VSA_b + vowel_ED_b, data = AcousticData)
+OT_Model5 <- lm(Int_OT ~ Hull_bVSD_75 + VSA_b + cornerDisp_b, data = AcousticData)
 
 ## Model 5 Assumption Check
 performance::check_model(OT_Model5)
@@ -274,7 +277,7 @@ anova(OT_Model4, OT_Model5)
 ```{r}
 
 ## Specifying Final Model
-OT_Model_final <- lm(transAcc ~ VSA_b, data = AcousticData)
+OT_Model_final <- lm(Int_OT ~ VSA_b, data = AcousticData)
 
 ## Final Model Assumption Check
 performance::check_model(OT_Model_final)
@@ -291,7 +294,7 @@ confint(OT_Model_final)
 ```{r}
 
 # Specifying Model 1
-VAS_Model1 <- lm(VAS ~ Hull_bVSD_25, data = AcousticData)
+VAS_Model1 <- lm(Int_VAS ~ Hull_bVSD_25, data = AcousticData)
 
 ## Model 1 Assumptions 
 performance::check_model(VAS_Model1)
@@ -305,7 +308,7 @@ summary(VAS_Model1)
 ```{r}
 
 ## Specifying Model 2
-VAS_Model2 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75, data = AcousticData)
+VAS_Model2 <- lm(Int_VAS ~ Hull_bVSD_25 + Hull_bVSD_75, data = AcousticData)
 
 ## Model 2 Assumption Check
 performance::check_model(VAS_Model2)
@@ -322,7 +325,7 @@ anova(VAS_Model1, VAS_Model2)
 ```{r}
 
 ## Specifying Model 3a
-VAS_Model3a <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b, data = AcousticData)
+VAS_Model3a <- lm(Int_VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b, data = AcousticData)
 
 ## Model 3a Assumption Check
 performance::check_model(VAS_Model3a)
@@ -341,7 +344,7 @@ This model removes VSD25 because of it's high VIF value > 5.
 ```{r}
 
 ## Specifying Model 3b
-VAS_Model3b <- lm(VAS ~ Hull_bVSD_75 + Hull_b, data = AcousticData)
+VAS_Model3b <- lm(Int_VAS ~ Hull_bVSD_75 + Hull_b, data = AcousticData)
 
 ## Model 3 Assumption Check
 performance::check_model(VAS_Model3b)
@@ -355,7 +358,7 @@ summary(VAS_Model3b)
 ```{r}
 
 ## Specifying Model 4
-VAS_Model4 <- lm(VAS ~ Hull_bVSD_75 + Hull_b + VSA_b, data = AcousticData)
+VAS_Model4 <- lm(Int_VAS ~ Hull_bVSD_75 + Hull_b + VSA_b, data = AcousticData)
 
 ## Model 4 Assumption Check
 performance::check_model(VAS_Model4)
@@ -373,7 +376,7 @@ anova(VAS_Model3b, VAS_Model4)
 ```{r}
 
 ## Specifying Model 5
-VAS_Model5 <- lm(VAS ~ Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b, data = AcousticData)
+VAS_Model5 <- lm(Int_VAS ~ Hull_bVSD_75 + Hull_b + VSA_b + cornerDisp_b, data = AcousticData)
 
 ## Model 5 Assumption Check
 performance::check_model(VAS_Model5)
@@ -391,7 +394,7 @@ anova(VAS_Model4, VAS_Model5)
 ```{r}
 
 ## Specifying Final Model
-VAS_Model_final <- lm(VAS ~ VSA_b, data = AcousticData)
+VAS_Model_final <- lm(Int_VAS ~ VSA_b, data = AcousticData)
 
 ## Final Model Assumption Check
 performance::check_model(VAS_Model_final)
@@ -408,7 +411,7 @@ confint(VAS_Model_final)
 ```{r}
 
 # Specify Model
-OT_VAS_model <- lm(transAcc ~ VAS*Etiology + VAS*Sex, data = AcousticData)
+OT_VAS_model <- lm(Int_OT ~ Int_VAS*Etiology + Int_VAS*Sex, data = AcousticData)
 
 # Assumption Check
 performance::check_model(OT_VAS_model)
@@ -423,7 +426,7 @@ summary(OT_VAS_model)
 ```{r}
 
 # Specify Final Model
-OT_VAS_final <- lm(transAcc ~ VAS, data = AcousticData)
+OT_VAS_final <- lm(Int_OT ~ Int_VAS, data = AcousticData)
 
 # Model Results
 summary(OT_VAS_final)
@@ -437,10 +440,10 @@ Looking at corner dispersion as the sole predictor.
 ```{r}
 
 # Specify Final Model
-OT_cornDisp <- lm(transAcc ~ vowel_ED_b, data = AcousticData)
+OT_cornDisp <- lm(Int_OT ~ cornerDisp_b, data = AcousticData)
 summary(OT_cornDisp)
 
-VAS_cornDisp <- lm(VAS ~ vowel_ED_b, data = AcousticData)
+VAS_cornDisp <- lm(Int_VAS ~ cornerDisp_b, data = AcousticData)
 summary(VAS_cornDisp)
 
 ```
@@ -460,18 +463,18 @@ gtData <- AcousticData %>%
   dplyr::group_by(Sex, Etiology) %>%
   dplyr::summarize(VSA_mean = mean(VSA_b, na.rm =T),
                    VSA_sd = sd(VSA_b, na.rm = T),
-                   Disp_mean = mean(vowel_ED_b, na.rm =T),
-                   Disp_sd = sd(vowel_ED_b, na.rm =T),
+                   Disp_mean = mean(cornerDisp_b, na.rm =T),
+                   Disp_sd = sd(cornerDisp_b, na.rm =T),
                    Hull_mean = mean(Hull_b, na.rm =T),
                    Hull_sd = sd(Hull_b, na.rm =T),
                    VSD25_mean = mean(Hull_bVSD_25, na.rm =T),
                    VSD25_sd = sd(Hull_bVSD_25, na.rm =T),
                    VSD75_mean = mean(Hull_bVSD_75, na.rm =T),
                    VSD75_sd = sd(Hull_bVSD_75, na.rm =T),
-                   VAS_mean = mean(VAS, na.rm =T),
-                   VAS_sd = sd(VAS, na.rm =T),
-                   OT_mean = mean(transAcc, na.rm =T),
-                   OT_sd = sd(transAcc, na.rm =T)) %>%
+                   VAS_mean = mean(Int_VAS, na.rm =T),
+                   VAS_sd = sd(Int_VAS, na.rm =T),
+                   OT_mean = mean(Int_OT, na.rm =T),
+                   OT_sd = sd(Int_OT, na.rm =T)) %>%
   pivot_longer(cols = VSA_mean:OT_sd, names_to = "Measure",
                values_to = "Value") %>%
   dplyr::mutate(Value = round(Value, digits = 2),
@@ -545,23 +548,23 @@ rm(gtData)
 ## Descriptives Table (Hz) - Supplemental Information
 ```{r}
 gtData <- rio::import("Prepped Data/AcousticMeasures.csv") %>%
-  dplyr::filter(!grepl("_rel", Speaker)) %>% # Filters out reliability data
-  dplyr::select(c(Speaker,
+  dplyr::filter(!grepl("_rel", SpeakerID)) %>% # Filters out reliability data
+  dplyr::select(c(SpeakerID,
                   Sex,
                   Etiology,
-                  vowel_ED, # Corner Dispersion
+                  cornerDisp, # Corner Dispersion
                   VSA, # Traditional VSA
                   Hull, # VSA Hull
                   Hull_VSD_25, # VSD 25
                   Hull_VSD_75, # VSD 75
-                  VAS, # Intelligibility (VAS)
-                  transAcc) # Intelligibility (OT)
+                  Int_VAS, # Intelligibility (VAS)
+                  Int_OT) # Intelligibility (OT)
                 ) %>% 
   # The following code ensure etiology, sex, and speaker are coded as factors
   dplyr::mutate(Etiology = as.factor(Etiology),
                 Sex = as.factor(Sex),
-                Speaker = as.factor(Speaker),
-                vowel_ED = vowel_ED,
+                SpeakerID = as.factor(SpeakerID),
+                cornerDisp = cornerDisp,
                 VSA = VSA/1000,
                 Hull = Hull/1000,
                 Hull_VSD_25 = Hull_VSD_25/1000,
@@ -580,18 +583,18 @@ gtData <- gtData %>%
   dplyr::group_by(Sex, Etiology) %>%
   dplyr::summarize(VSA_mean = mean(VSA, na.rm =T),
                    VSA_sd = sd(VSA, na.rm = T),
-                   Disp_mean = mean(vowel_ED, na.rm =T),
-                   Disp_sd = sd(vowel_ED, na.rm =T),
+                   Disp_mean = mean(cornerDisp, na.rm =T),
+                   Disp_sd = sd(cornerDisp, na.rm =T),
                    Hull_mean = mean(Hull, na.rm =T),
                    Hull_sd = sd(Hull, na.rm =T),
                    VSD25_mean = mean(Hull_VSD_25, na.rm =T),
                    VSD25_sd = sd(Hull_VSD_25, na.rm =T),
                    VSD75_mean = mean(Hull_VSD_75, na.rm =T),
                    VSD75_sd = sd(Hull_VSD_75, na.rm =T),
-                   VAS_mean = mean(VAS, na.rm =T),
-                   VAS_sd = sd(VAS, na.rm =T),
-                   OT_mean = mean(transAcc, na.rm =T),
-                   OT_sd = sd(transAcc, na.rm =T)) %>%
+                   VAS_mean = mean(Int_VAS, na.rm =T),
+                   VAS_sd = sd(Int_VAS, na.rm =T),
+                   OT_mean = mean(Int_OT, na.rm =T),
+                   OT_sd = sd(Int_OT, na.rm =T)) %>%
   pivot_longer(cols = VSA_mean:OT_sd, names_to = "Measure",
                values_to = "Value") %>%
   dplyr::mutate(Value = round(Value, digits = 2),
@@ -679,7 +682,7 @@ sjPlot::tab_model(OT_Model1,
 ```{r}
 sjPlot::tab_model(VAS_Model1,
                   VAS_Model2,
-                  VAS_Model3,
+                  VAS_Model3a,
                   VAS_Model4,
                   VAS_Model5,
                   VAS_Model_final,
@@ -707,7 +710,7 @@ lineAlpha <- .8
 
 ## Loading example data ----
 vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
-  dplyr::filter(Speaker == "AF8")
+  dplyr::filter(SpeakerID == "AF8")
 
   Pitch_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""), 
                               pattern = ".Pitch", ignore.case = T) %>%
@@ -780,8 +783,6 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
     dplyr::group_by(Vowel) %>%
     dplyr::summarize(mean_F1 = mean(F1_tempMid),
               mean_F2 = mean(F2_tempMid),
-              mean_F1_z = mean(F1_z_tempMid),
-              mean_F2_z = mean(F2_z_tempMid),
               mean_F1_b = mean(F1_b_tempMid),
               mean_F2_b = mean(F2_b_tempMid)) %>%
     dplyr::filter(Vowel == "v")
@@ -791,13 +792,10 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
     dplyr::group_by(Vowel) %>%
     dplyr::summarize(mean_F1 = mean(F1_tempMid),
               mean_F2 = mean(F2_tempMid),
-              mean_F1_z = mean(F1_z_tempMid),
-              mean_F2_z = mean(F2_z_tempMid),
               mean_F1_b = mean(F1_b_tempMid),
               mean_F2_b = mean(F2_b_tempMid)) %>%
-    dplyr::mutate(Vowel_ED = sqrt((mean_F1-wedge$mean_F1)^2 + (mean_F2-wedge$mean_F2)^2),
-                  Vowel_ED_z = sqrt((mean_F1_z-wedge$mean_F1_z)^2 + (mean_F2_z-wedge$mean_F2_z)^2),
-                  Vowel_ED_b = sqrt((mean_F1_b-wedge$mean_F1_b)^2 + (mean_F2_b-wedge$mean_F2_b)^2))
+    dplyr::mutate(cornerDisp = sqrt((mean_F1-wedge$mean_F1)^2 + (mean_F2-wedge$mean_F2)^2),
+                  cornerDisp_b = sqrt((mean_F1_b-wedge$mean_F1_b)^2 + (mean_F2_b-wedge$mean_F2_b)^2))
 
     
 # Plot Corner Dispersion
@@ -884,8 +882,6 @@ vowelData <- rio::import("Prepped Data/Vowel Data.csv") %>%
     dplyr::group_by(Vowel) %>%
     dplyr::summarize(mean_F1 = mean(F1_tempMid),
               mean_F2 = mean(F2_tempMid),
-              mean_F1_z = mean(F1_z_tempMid),
-              mean_F2_z = mean(F2_z_tempMid),
               mean_F1_b = mean(F1_b_tempMid),
               mean_F2_b = mean(F2_b_tempMid)) 
   
@@ -1318,12 +1314,12 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data/", sep = ""
 ## OT vs. VAS
 ```{r}
 plotData_Int <- AcousticData %>%
-  dplyr::filter(!grepl("_rel", Speaker)) %>%
-  dplyr::group_by(Speaker) %>%
-  dplyr::mutate(segMin = base::min(VAS, transAcc),
-                segMax = base::max(VAS, transAcc),
-                ratingAvg = mean(VAS, transAcc, na.rm = T),
-                Speaker = as.factor(Speaker),
+  dplyr::filter(!grepl("_rel", SpeakerID)) %>%
+  dplyr::group_by(SpeakerID) %>%
+  dplyr::mutate(segMin = base::min(Int_VAS, Int_OT),
+                segMax = base::max(Int_VAS, Int_OT),
+                ratingAvg = mean(Int_VAS, Int_OT, na.rm = T),
+                SpeakerID = as.factor(SpeakerID),
                 Etiology = case_when(
                   Etiology == "Ataxic" ~ "Ataxia",
                   TRUE ~ as.character(Etiology)
@@ -1334,19 +1330,19 @@ plotData_Int <- AcousticData %>%
 my_pal <- c("#f26430", "#272D2D","#256eff")
 # With a bit more style
 plot_Int <- ggplot(plotData_Int) +
-  geom_segment(aes(x = fct_inorder(Speaker),
-                   xend = Speaker,
+  geom_segment(aes(x = fct_inorder(SpeakerID),
+                   xend = SpeakerID,
                    y = segMin,
                    yend = segMax,
                    color = Etiology)) +
-  geom_point(aes(x = Speaker,
-                 y = VAS,
+  geom_point(aes(x = SpeakerID,
+                 y = Int_VAS,
                  color = Etiology),
              #color = my_pal[1],
              size = 3,
              shape = 19) +
-  geom_point(aes(x = Speaker,
-                 y = transAcc,
+  geom_point(aes(x = SpeakerID,
+                 y = Int_OT,
                  color = Etiology),
              #color = my_pal[2],
              size = 3,
@@ -1367,8 +1363,8 @@ myPal <- c("#1AAD77", "#1279B5", "#FFBF00", "#FD7853", "#BF3178")
 myShapes <- c(16, 18, 17, 15)
 
 OT_VASscatter <- ggplot(plotData_Int,
-                  aes(x = VAS,
-                      y = transAcc,
+                  aes(x = Int_VAS,
+                      y = Int_OT,
                       color = Etiology,
                       shape = Etiology,
                       linetype = Etiology)) +
@@ -1397,14 +1393,14 @@ rm(scatter1, scatter2, combinedScatter)
 ## Model Scatterplots
 ```{r}
 modelFigureData <- AcousticData %>%
-  dplyr::filter(!grepl("_rel",Speaker)) %>%
-  dplyr::select(Speaker, Etiology, Sex, VSA_b, vowel_ED_b, Hull_b, Hull_bVSD_25, Hull_bVSD_75, VAS, transAcc) %>%
-  dplyr::mutate(Speaker = as.factor(Speaker),
+  dplyr::filter(!grepl("_rel",SpeakerID)) %>%
+  dplyr::select(SpeakerID, Etiology, Sex, VSA_b, cornerDisp_b, Hull_b, Hull_bVSD_25, Hull_bVSD_75, Int_VAS, Int_OT) %>%
+  dplyr::mutate(SpeakerID = as.factor(SpeakerID),
                 Etiology = as.factor(Etiology),
                 Sex = as.factor(Sex)) %>%
-  tidyr::pivot_longer(cols = VAS:transAcc, names_to = "IntType", values_to = "Int") %>%
+  tidyr::pivot_longer(cols = Int_VAS:Int_OT, names_to = "IntType", values_to = "Int") %>%
   dplyr::mutate(IntType = case_when(
-    IntType == "transAcc" ~ "OT",
+    IntType == "Int_OT" ~ "OT",
     TRUE ~ "VAS"
   ),
                 IntType = as.factor(IntType))
@@ -1437,7 +1433,7 @@ VSA <- modelFigureData %>%
 
 disp <- modelFigureData %>%
   ggplot() +
-  aes(x = vowel_ED_b,
+  aes(x = cornerDisp_b,
       y = Int,
       color = IntType,
       shape = IntType,
@@ -1598,6 +1594,24 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
   }
   rm(c)
   
+  # This function will be used to calculate Hull throughout the script
+  library(sp)
+cHull <- function(x,y) {
+  x1 <- na.omit(x)
+  y1 <- na.omit(y)
+  hpts <- chull(x = x1, y = y1)
+  hpts <- c(hpts, hpts[1])
+  xy.coords <- cbind(x1, y1)
+  chull.coords <- xy.coords[hpts,]
+  if (NROW(chull.coords) < 4) {
+    cHull <- NA
+  } else {
+    chull.poly <- sp::Polygon(chull.coords, hole=F)
+    cHull <- chull.poly@area
+  }
+  return(cHull)
+}
+
     Hull_b <- cHull(Formants_PRAAT$F1_b, Formants_PRAAT$F2_b)
 ### Plotting Hull
       convexCoords <- Formants_PRAAT %>%
@@ -1900,11 +1914,11 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
 
 # Transforming the Data to Long format
 plotData <- tidyr::pivot_longer(AcousticData,
-                      cols = VAS:transAcc,
+                      cols = Int_VAS:Int_OT,
                       names_to = "Intelligibility_Measure",
                       values_to = "Intelligibility_Value") %>%
   tidyr::pivot_longer(.,
-                      cols = vowel_ED_b:Hull_bVSD_75,
+                      cols = cornerDisp_b:Hull_bVSD_75,
                       names_to = "Acoustic_Measure",
                       values_to = "Acoustic_Value") %>%
   dplyr::mutate(Etiology = case_when(
@@ -1918,7 +1932,7 @@ plotData <- tidyr::pivot_longer(AcousticData,
     Acoustic_Measure == "Hull_bVSD_75" ~ "VSD_75",
     Acoustic_Measure == "Hull_b" ~ "VSA_Hull",
     Acoustic_Measure == "VSA_b" ~ "VSA",
-    Acoustic_Measure == "vowel_ED_b" ~ "Corner_Dispersion"
+    Acoustic_Measure == "cornerDisp_b" ~ "Corner_Dispersion"
     ),
     Acoustic_Measure = as.factor(Acoustic_Measure),
                 Acoustic_Measure = fct_relevel(Acoustic_Measure, c("VSA",
@@ -1926,8 +1940,8 @@ plotData <- tidyr::pivot_longer(AcousticData,
                                                                    "VSA_Hull",
                                                                    "VSD_25", 
                                                                    "VSD_75"))) %>%
-  dplyr::mutate(Intelligibility_Measure = case_when(Intelligibility_Measure == "transAcc" ~ "OT",
-                                                    Intelligibility_Measure == "VAS" ~ "VAS"))
+  dplyr::mutate(Intelligibility_Measure = case_when(Intelligibility_Measure == "Int_OT" ~ "OT",
+                                                    Intelligibility_Measure == "Int_VAS" ~ "VAS"))
                 
 # Colors and Shapes for plot
 
@@ -1990,11 +2004,12 @@ rm(Listeners)
 ## Speakers
 ```{r}
 
-Ages <- rio::import("Prepped Data/Speaker Ages.xlsx")
+Ages <- rio::import("Prepped Data/Speaker Ages.xlsx") %>%
+  dplyr::rename(SpeakerID = Speaker)
 
 SpeakerDemo <- AcousticData %>%
-  dplyr::select(c(Speaker, Sex, Etiology)) %>%
-  full_join(., Ages, by = "Speaker")
+  dplyr::select(c(SpeakerID, Sex, Etiology)) %>%
+  full_join(., Ages, by = "SpeakerID")
 
 SpeakerDemo %>%
   furniture::table1(Sex, Etiology, Age, na.rm = F)
