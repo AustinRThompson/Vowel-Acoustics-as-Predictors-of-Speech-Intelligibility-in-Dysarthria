@@ -21,8 +21,8 @@ library(furniture) # install.packages('furniture')
 library(gt) # install.packages('gt')
 library(patchwork) # install.packages('patchwork')
 library(ks) # install.packages('ks')
+library(sjPlot) # install.packages('sjPlot')
 library(emuR) # install.packages('emuR')
-library(mslTools) # devtools::install_github("AustinRThompson/mslTools")
 
 ```
 
@@ -167,16 +167,17 @@ rm(CorrMatrix)
 # Research Q1: Modeling Intelligibility
 
 ## Orthographic Transcriptions
-### Model 1
+
+### Model 1a
 ```{r}
 
-# Specifying Model 1
+# Specifying Model 1a
 OT_Model1 <- lm(transAcc ~ Hull_bVSD_25, data = AcousticData)
 
-## Model 1 Assumptions 
+## Model 1a Assumptions 
 performance::check_model(OT_Model1)
 
-## Model 1 Summary
+## Model 1a Summary
 summary(OT_Model1)
 
 ```
@@ -444,7 +445,7 @@ summary(VAS_cornDisp)
 
 ```
 # Manuscript Tables
-## Descriptives Table
+## Descriptives Table (Bark)
 ```{r}
 # Prepping the descriptives data as "gtData"
 gtData <- AcousticData %>%
@@ -536,6 +537,126 @@ gtData %>%
      Ataxic_sd = "SD"
   ) %>%
   gtsave("DescriptivesTable.html", path = "Tables")
+
+# Removing unwanted variables
+rm(gtData)
+```
+
+## Descriptives Table (Hz) - Supplemental Information
+```{r}
+gtData <- rio::import("Prepped Data/AcousticMeasures.csv") %>%
+  dplyr::filter(!grepl("_rel", Speaker)) %>% # Filters out reliability data
+  dplyr::select(c(Speaker,
+                  Sex,
+                  Etiology,
+                  vowel_ED, # Corner Dispersion
+                  VSA, # Traditional VSA
+                  Hull, # VSA Hull
+                  Hull_VSD_25, # VSD 25
+                  Hull_VSD_75, # VSD 75
+                  VAS, # Intelligibility (VAS)
+                  transAcc) # Intelligibility (OT)
+                ) %>% 
+  # The following code ensure etiology, sex, and speaker are coded as factors
+  dplyr::mutate(Etiology = as.factor(Etiology),
+                Sex = as.factor(Sex),
+                Speaker = as.factor(Speaker),
+                vowel_ED = vowel_ED,
+                VSA = VSA/1000,
+                Hull = Hull/1000,
+                Hull_VSD_25 = Hull_VSD_25/1000,
+                Hull_VSD_75 = Hull_VSD_75/1000)
+  
+# Prepping the descriptives data as "gtData"
+gtData <- gtData %>%
+  rbind(.,gtData %>%
+          dplyr::mutate(Etiology = "All Etiologies")) %>%
+  rbind(.,gtData %>%
+          rbind(.,gtData %>%
+          dplyr::mutate(Etiology = "All Etiologies")) %>%
+          dplyr::mutate(Sex = "All")) %>%
+  dplyr::mutate(Sex = as.factor(Sex),
+                Etiology = as.factor(Etiology)) %>%
+  dplyr::group_by(Sex, Etiology) %>%
+  dplyr::summarize(VSA_mean = mean(VSA, na.rm =T),
+                   VSA_sd = sd(VSA, na.rm = T),
+                   Disp_mean = mean(vowel_ED, na.rm =T),
+                   Disp_sd = sd(vowel_ED, na.rm =T),
+                   Hull_mean = mean(Hull, na.rm =T),
+                   Hull_sd = sd(Hull, na.rm =T),
+                   VSD25_mean = mean(Hull_VSD_25, na.rm =T),
+                   VSD25_sd = sd(Hull_VSD_25, na.rm =T),
+                   VSD75_mean = mean(Hull_VSD_75, na.rm =T),
+                   VSD75_sd = sd(Hull_VSD_75, na.rm =T),
+                   VAS_mean = mean(VAS, na.rm =T),
+                   VAS_sd = sd(VAS, na.rm =T),
+                   OT_mean = mean(transAcc, na.rm =T),
+                   OT_sd = sd(transAcc, na.rm =T)) %>%
+  pivot_longer(cols = VSA_mean:OT_sd, names_to = "Measure",
+               values_to = "Value") %>%
+  dplyr::mutate(Value = round(Value, digits = 2),
+                meanSD = ifelse(grepl("_mean",Measure),"M","sd"),
+                Measure = gsub("_mean","",Measure),
+                Measure = gsub("_sd","",Measure),
+                Etiology = paste(Etiology,meanSD, sep = "_"),
+                Sex = case_when(
+                  Sex == "All" ~ "All Speakers",
+                  Sex == "M" ~ "Male Speakers",
+                  Sex == "F" ~ "Female Speakers"
+                )) %>%
+  dplyr::select(!meanSD) %>%
+  pivot_wider(names_from = Etiology, values_from = "Value") %>%
+  dplyr::filter(Measure != "VSD50")
+
+# Creating and saving the gt table
+gtData %>%
+  gt::gt(
+    rowname_col = "Measure",
+    groupname_col = "Sex",
+  ) %>%
+  fmt_number(
+    columns = 'All Etiologies_M':PD_sd,
+    decimals = 2
+  ) %>%
+  tab_spanner(
+    label = "All Etiologies",
+    columns = c('All Etiologies_M', 'All Etiologies_sd')
+  ) %>%
+    tab_spanner(
+    label = "ALS",
+    columns = c(ALS_M, ALS_sd)
+  ) %>%
+  tab_spanner(
+    label = "PD",
+    columns = c(PD_M, PD_sd)
+  ) %>%
+  tab_spanner(
+    label = "HD",
+    columns = c(HD_M, HD_sd)
+  ) %>%
+  tab_spanner(
+    label = "Ataxic",
+    columns = c(Ataxic_M, Ataxic_sd)
+  ) %>%
+  gt::cols_move_to_start(
+    columns = c('All Etiologies_M','All Etiologies_sd')
+  ) %>%
+  row_group_order(
+    groups = c("All Speakers", "Female Speakers", "Male Speakers")
+    ) %>%
+  cols_label(
+     'All Etiologies_M' = "M",
+     'All Etiologies_sd' = "SD",
+     ALS_M = "M",
+     ALS_sd = "SD",
+     PD_M = "M",
+     PD_sd = "SD",
+     HD_M = "M",
+     HD_sd = "SD",
+     Ataxic_M = "M",
+     Ataxic_sd = "SD"
+  ) %>%
+  gtsave("DescriptivesTable_Hz.html", path = "Supplemental Information")
 
 # Removing unwanted variables
 rm(gtData)
@@ -1772,6 +1893,89 @@ Formants_PRAAT <- list.files(path = paste("Prepped Data/Example Data", sep = "")
              scale = .9)
       
 ```
+
+## Scatterplot facet by acoustic measure and intelligibility measure. Displayed by eitology
+
+```{r}
+
+# Transforming the Data to Long format
+plotData <- tidyr::pivot_longer(AcousticData,
+                      cols = VAS:transAcc,
+                      names_to = "Intelligibility_Measure",
+                      values_to = "Intelligibility_Value") %>%
+  tidyr::pivot_longer(.,
+                      cols = vowel_ED_b:Hull_bVSD_75,
+                      names_to = "Acoustic_Measure",
+                      values_to = "Acoustic_Value") %>%
+  dplyr::mutate(Etiology = case_when(
+    Etiology == "Ataxic" ~ "Ataxia",
+    TRUE ~ as.character(Etiology)
+    ),
+    Etiology = as.factor(Etiology),
+    Etiology = fct_relevel(Etiology, c("Ataxia", "ALS", "HD", "PD"))) %>%
+  dplyr::mutate(Acoustic_Measure = case_when(
+    Acoustic_Measure == "Hull_bVSD_25" ~ "VSD_25",
+    Acoustic_Measure == "Hull_bVSD_75" ~ "VSD_75",
+    Acoustic_Measure == "Hull_b" ~ "VSA_Hull",
+    Acoustic_Measure == "VSA_b" ~ "VSA",
+    Acoustic_Measure == "vowel_ED_b" ~ "Corner_Dispersion"
+    ),
+    Acoustic_Measure = as.factor(Acoustic_Measure),
+                Acoustic_Measure = fct_relevel(Acoustic_Measure, c("VSA",
+                                                                   "Corner_Dispersion",
+                                                                   "VSA_Hull",
+                                                                   "VSD_25", 
+                                                                   "VSD_75"))) %>%
+  dplyr::mutate(Intelligibility_Measure = case_when(Intelligibility_Measure == "transAcc" ~ "OT",
+                                                    Intelligibility_Measure == "VAS" ~ "VAS"))
+                
+# Colors and Shapes for plot
+
+myPal <- c("#1AAD77", "#1279B5", "#FFBF00", "#FD7853", "#BF3178")
+myShapes <- c(16, 18, 17, 15)
+my_labeller <- as_labeller(c(`VSA` = "VSA",
+                             `Corner_Dispersion` = "Corner~Dispersion",
+                             `VSA_Hull` = "VSA[Hull]",
+                             `VSD_25` = "VSD[25]",
+                             `VSD_75` = "VSD[75]",
+                             `OT` = "OT",
+                             `VAS` = "VAS"),
+                           default = label_parsed)
+
+# Visualizing relationships between acoustic measures and intelligibility by etiology
+
+
+plotData %>%
+  ggplot() +
+  aes(x = Acoustic_Value,
+      y = Intelligibility_Value,
+      color = Etiology,
+      shape = Etiology,
+      linetype = Etiology) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  facet_grid(rows = vars(Intelligibility_Measure),
+             cols = vars(Acoustic_Measure),
+             scales = "free",
+             labeller = my_labeller) +
+  scale_color_manual(values = myPal) +
+  scale_shape_manual(values = myShapes) +
+  labs(x = NULL,
+       y = "Intelligibility") +
+  theme_bw() +
+  theme(aspect.ratio = 1)
+
+ggsave("Plots/Etiology_Effects_Intelligibility_plot.png",
+       plot = last_plot(),
+       height = 4,
+       width = 11,
+       units = "in",
+       scale = .7)
+
+```
+
+
+
 # Demographic Info
 ## Listeners
 ```{r}

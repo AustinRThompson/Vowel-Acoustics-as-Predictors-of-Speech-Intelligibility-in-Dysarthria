@@ -3,26 +3,25 @@ title: "Vowel Acoustics as Predictors of Speech Intelligibility in Dysarthria: A
 output: html_notebook
 ---
 
-This is the code for the statistical analysis for "Vowel Acoustics as Predictors of Speech Intelligibility in Dysarthria."
+This is the code for the alternative statistical analysis for "Vowel Acoustics as Predictors of Speech Intelligibility in Dysarthria."
 
 # Loading Packages
-
+This block of code loads in the required packages for this script. In the #'s, I have provided to the code to install each package if needed.
 ```{r}
 
-library(rio)
-library(tidyverse)
+library(rio) # install.packages('rio')
+library(tidyverse) # install.packages('tidyverse')
 library(irr) # install.packages('irr')
-library(performance)
-library(car)
-library(ggpubr)
-library("Hmisc") # install.packages('Hmisc')
-library(ggridges)
+library(performance) # install.packages('performance')
+library(car) # install.packages('car')
+library(ggpubr) # install.packages('ggpubr')
+library(Hmisc) # install.packages('Hmisc')
+library(ggridges) # install.packages('ggridges')
 library(furniture) # install.packages('furniture')
-library(gt)
-library(patchwork)
-library(ks)
+library(gt) # install.packages('gt')
+library(patchwork) # install.packages('patchwork')
+library(ks) # install.packages('ks')
 library(emuR) # install.packages('emuR')
-library(geomtextpath) # remotes::install_github("AllanCameron/geomtextpath")
 
 ```
 
@@ -30,35 +29,92 @@ library(geomtextpath) # remotes::install_github("AllanCameron/geomtextpath")
 
 ```{r}
 
+# Reliability Data
 Reliability <- rio::import("Prepped Data/Reliability Data.csv")
+
+# Speaker Data
 AcousticData <- rio::import("Prepped Data/AcousticMeasures.csv") %>%
-  dplyr::mutate(intDiff = VAS - transAcc)
+  dplyr::filter(!grepl("_rel", Speaker)) %>% # Filters out reliability data
+  dplyr::select(c(Speaker,
+                  Sex,
+                  Etiology,
+                  vowel_ED_b, # Corner Dispersion
+                  VSA_b, # Traditional VSA
+                  Hull_b, # VSA Hull
+                  Hull_bVSD_25, # VSD 25
+                  Hull_bVSD_75, # VSD 75
+                  VAS, # Intelligibility (VAS)
+                  transAcc) # Intelligibility (OT)
+                ) %>% 
+  # The following code ensure etiology, sex, and speaker are coded as factors
+  dplyr::mutate(Etiology = as.factor(Etiology),
+                Sex = as.factor(Sex),
+                Speaker = as.factor(Speaker))
 
-AcousticData <- AcousticData %>%
-  dplyr::filter(!grepl("_rel", Speaker)) %>%
-  dplyr::select(c(Speaker, Sex, Etiology, vowel_ED_b, VSA_b, Hull_b, Hull_bVSD_25, Hull_bVSD_50, Hull_bVSD_75, VAS, transAcc))
-
+# Listener Data
 Listeners <- rio::import("Prepped Data/Listener_Demographics.csv") %>%
-  dplyr::select(!c(StartDate:proloficID, Q2.4_6_TEXT, Q3.2_8_TEXT, AudioCheck:EP3))
-
-Listeners$race[Listeners$Q3.3_7_TEXT == "Native American/ African amercing"] <- "Biracial or Multiracial"
+  dplyr::select(!c(StartDate:proloficID, # removes unwanted columns
+                   Q2.4_6_TEXT,
+                   Q3.2_8_TEXT,
+                   AudioCheck:EP3)) %>% 
+  # The follow code corrects for when a listener replied "Other" instead of the Biracial or Multiracial" response
+  dplyr::mutate(race = case_when(
+    Q3.3_7_TEXT == "Native American/ African amercing" ~ "Biracial or Multiracial",
+    TRUE ~ race
+  ))
 ```
+
+# Interactions with Etiology
+
+In our primary analysis, the VAS and OT models only included the vowel acoustic measures. Here, we are testing whether there are any interaction effects.
+
+## Data Visualization
+
+```{r}
+
+# Transforming the Data to Long format
+AcousticDataLong <- tidyr::pivot_longer(AcousticData,
+                      cols = VAS:transAcc,
+                      names_to = "Intelligibility_Measure",
+                      values_to = "Intelligibility_Value")
+
+AcousticDataLong <- tidyr::pivot_longer(AcousticDataLong,
+                                        cols = vowel_ED_b:Hull_bVSD_75,
+                                        names_to = "Acoustic_Measure",
+                                        values_to = "Acoustic_Value")
+
+#Vidualizing relationships between acoustic measures and intelligibility by etiology
+
+AcousticDataLong %>%
+  ggplot() +
+  aes(x = Acoustic_Value,
+      y = Intelligibility_Value,
+      color = Etiology) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  facet_grid(rows = vars(Intelligibility_Measure),
+             cols = vars(Acoustic_Measure),
+             scales = "free") +
+  theme_bw()
+
+
+```
+
+
 
 # Alternate Analysis
 
 In this alternate analysis, we are looking at the relationship between these acoustic measures with speech intelligibility for the ALS/PD and the HD/Ataxic speakers separately. We create a new variable called Incoord, where the ALS/PD Speakers are set as the reference group (in order to compare to the Ataxic/HD Speaker Group). Group Comparisons, additional data visualizations, and further linear model comparisons are completed.
 
 ## Data Prep
-
+This block creates metagroups comprising of Group A (ALS & PD), and Group B (HD & Ataxia). These two 
 ```{r}
 
-# Creating a new variable in AcousticData. Incoord is a dummy variable. ALS/PD Speakers = 0, HD/Ataxic = 1
-
 AcousticData <- AcousticData %>%
-  dplyr::mutate(Incoord = case_when(Etiology == "HD" ~ 1,
-                                    Etiology == "Ataxic" ~ 1,
-                                    TRUE ~ 0)) %>%
-  dplyr::mutate(Incoord = as.factor(Incoord))
+  dplyr::mutate(metaGroup = case_when(Etiology == "HD" ~ "A",
+                                    Etiology == "Ataxic" ~ "A",
+                                    TRUE ~ "B")) %>%
+  dplyr::mutate(metaGroup = as.factor(metaGroup))
 
 ```
 
@@ -66,374 +122,20 @@ AcousticData <- AcousticData %>%
 
 ```{r}
 
-Descriptives_ALS.PD_incoord <- AcousticData %>%
-  dplyr::group_by(Incoord) %>%
+AcousticData %>%
+  dplyr::group_by(metaGroup) %>%
   dplyr::summarize(VSA_mean = mean(VSA_b, na.rm =T), VSA_sd = sd(VSA_b, na.rm = T),
                    Disp_mean = mean(vowel_ED_b, na.rm =T), Disp_sd = sd(vowel_ED_b, na.rm =T),
                    Hull_mean = mean(Hull_b, na.rm =T), Hull_sd = sd(Hull_b, na.rm =T),
                    VSD25_mean = mean(Hull_bVSD_25, na.rm =T), VSD25_sd = sd(Hull_bVSD_25, na.rm =T),
-                   VSD50_mean = mean(Hull_bVSD_50, na.rm =T), VSD50_sd = sd(Hull_bVSD_50, na.rm =T),
                    VSD75_mean = mean(Hull_bVSD_75, na.rm =T), VSD75_sd = sd(Hull_bVSD_75, na.rm =T),
                    VAS_mean = mean(VAS, na.rm =T), VAS_sd = sd(VAS, na.rm =T),
                    OT_mean = mean(transAcc, na.rm =T), OT_sd = sd(transAcc, na.rm =T))
 
-Descriptives_ALS.PD_incoord
-
 ```
-
-## Data Vis
-
-### Group Comparison Ridgeline Plots
-
-```{r}
-
-# VSA Ridgeline Plot by Incoordination (Incoord = 0 are ALS/PD Speakers, Incoord == 1 are HD/Ataxic Speakers)
-
-VSA_incoord.plot <- AcousticData %>%
-  ggplot() +
-  aes(x = VSA_b,
-      y = Incoord,
-      color = Incoord,
-      fill = Incoord) +
-  geom_density_ridges(jittered_points = T, 
-                      position = position_points_jitter(width = 0.01, height = 0), 
-                      point_shape = '|', 
-                      point_size = 5,
-                      point_alpha = 1,
-                      alpha = 0.7,
-                      scale = .7) +
-  xlab("Vowel Space Area (Bark)") +
-  theme_classic()
-
-# Corner Dispersion Ridgeline Plot by Incoordination (Incoord = 0 are ALS/PD Speakers, Incoord == 1 are HD/Ataxic Speakers)
-
-disp_incoord.plot <- AcousticData %>%
-  ggplot() +
-  aes(x = vowel_ED_b,
-      y = Incoord,
-      color = Incoord,
-      fill = Incoord) +
-  geom_density_ridges(jittered_points = T, 
-                      position = position_points_jitter(width = 0.01, height = 0), 
-                      point_shape = '|', 
-                      point_size = 5,
-                      point_alpha = 1,
-                      alpha = 0.7,
-                      scale = .7) +
-  xlab("Corner Dispersion (Bark)") +
-  theme_classic()
-
-# Hull Ridgeline Plot by Incoordination (Incoord = 0 are ALS/PD Speakers, Incoord == 1 are HD/Ataxic Speakers)
-
-hull_incoord.plot <- AcousticData %>%
-  ggplot() +
-  aes(x = Hull_b,
-      y = Incoord,
-      color = Incoord,
-      fill = Incoord) +
-  geom_density_ridges(jittered_points = T, 
-                      position = position_points_jitter(width = 0.01, height = 0), 
-                      point_shape = '|', 
-                      point_size = 5,
-                      point_alpha = 1,
-                      alpha = 0.7,
-                      scale = .7) +
-  xlab("Vowel Space Hull (Bark)") +
-  theme_classic()
-
-# VSD 25 Ridgeline Plot by Incoordination (Incoord = 0 are ALS/PD Speakers, Incoord == 1 are HD/Ataxic Speakers)
-
-vsd25_incoord.plot <- AcousticData %>%
-  ggplot() +
-  aes(x = Hull_bVSD_25,
-      y = Incoord,
-      color = Incoord,
-      fill = Incoord) +
-  geom_density_ridges(jittered_points = T, 
-                      position = position_points_jitter(width = 0.01, height = 0), 
-                      point_shape = '|', 
-                      point_size = 5,
-                      point_alpha = 1,
-                      alpha = 0.7,
-                      scale = .7) +
-  xlab("Vowel Space Desnity 25 (Bark)") +
-  theme_classic()
-
-# VSD 50 Ridgeline Plot by Incoordination (Incoord = 0 are ALS/PD Speakers, Incoord == 1 are HD/Ataxic Speakers)
-
-vsd50_incoord.plot <- AcousticData %>%
-  ggplot() +
-  aes(x = Hull_bVSD_50,
-      y = Incoord,
-      color = Incoord,
-      fill = Incoord) +
-  geom_density_ridges(jittered_points = T, 
-                      position = position_points_jitter(width = 0.01, height = 0), 
-                      point_shape = '|', 
-                      point_size = 5,
-                      point_alpha = 1,
-                      alpha = 0.7,
-                      scale = .7) +
-  xlab("Vowel Space Desnity 50 (Bark)") +
-  theme_classic()
-
-# VSD 75 Ridgeline Plot by Incoordination (Incoord = 0 are ALS/PD Speakers, Incoord == 1 are HD/Ataxic Speakers)
-
-vsd75_incoord.plot <- AcousticData %>%
-  ggplot() +
-  aes(x = Hull_bVSD_75,
-      y = Incoord,
-      color = Incoord,
-      fill = Incoord) +
-  geom_density_ridges(jittered_points = T, 
-                      position = position_points_jitter(width = 0.01, height = 0), 
-                      point_shape = '|', 
-                      point_size = 5,
-                      point_alpha = 1,
-                      alpha = 0.7,
-                      scale = .7) +
-  xlab("Vowel Space Desnity 75 (Bark)") +
-  theme_classic()
-
-# Orthographic Transcription Ridgeline Plot by Incoordination (Incoord = 0 are ALS/PD Speakers, Incoord == 1 are HD/Ataxic Speakers)
-
-OT_incoord.plot <- AcousticData %>%
-  ggplot() +
-  aes(x = transAcc,
-      y = Incoord,
-      color = Incoord,
-      fill = Incoord) +
-  geom_density_ridges(jittered_points = T, 
-                      position = position_points_jitter(width = 0.01, height = 0), 
-                      point_shape = '|', 
-                      point_size = 5,
-                      point_alpha = 1,
-                      alpha = 0.7,
-                      scale = .7) +
-  xlab("Percent Words Correct") +
-  theme_classic()
-
-# Visual Analog Scale Intelligibility Rating Ridgeline Plot by Incoordination (Incoord = 0 are ALS/PD Speakers, Incoord == 1 are HD/Ataxic Speakers)
-
-VAS_incoord.plot <- AcousticData %>%
-  ggplot() +
-  aes(x = VAS,
-      y = Incoord,
-      color = Incoord,
-      fill = Incoord) +
-  geom_density_ridges(jittered_points = T, 
-                      position = position_points_jitter(width = 0.01, height = 0), 
-                      point_shape = '|', 
-                      point_size = 5,
-                      point_alpha = 1,
-                      alpha = 0.7,
-                      scale = .7) +
-  xlab("Ratigns") +
-  theme_classic()
-
-# Creating Distributions by Incoord Figure
-
-Distributions_incoord <- ggpubr::ggarrange(VSA_incoord.plot, disp_incoord.plot, hull_incoord.plot, vsd25_incoord.plot, vsd50_incoord.plot, vsd75_incoord.plot, OT_incoord.plot, VAS_incoord.plot,
-                  ncol = 2,
-                  nrow = 4)
-
-# Saving Distribution Figure
-
-ggsave("Plots/Distribution_incoord.png", plot = last_plot(), width = 10, height = 10, unit = "in")
-
-```
-
-### Scatterplots
-
-```{r}
-
-# OT Scatterplots by Incoord
-
-OT_VSA.incoord <- AcousticData %>%
-  ggplot() +
-  aes(x = VSA_b,
-      y = transAcc,
-      color = Incoord) +
-  geom_point() +
-  geom_smooth(method = "lm", se = F) +
-  xlab("Vowel Space Area (Bark)") +
-  ylab("Percent Words Correct") +
-  ggtitle("Orthographic Transcription") +
-  coord_cartesian(ylim = c(0,100)) +
-  theme_classic() +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
-
-OT_disp.incoord <- AcousticData %>%
-  ggplot() +
-  aes(x = vowel_ED_b,
-      y = transAcc,
-      color = Incoord) +
-  geom_point() +
-  geom_smooth(method = "lm", se = F) +
-  xlab("Corner Dispersion (Bark)") +
-  ylab("Percent Words Correct") +
-  coord_cartesian(ylim = c(0,100)) +
-  theme_classic()
-
-OT_Hull.incoord <- AcousticData %>%
-  ggplot() +
-  aes(x = Hull_b,
-      y = transAcc,
-      color = Incoord) +
-  geom_point() +
-  geom_smooth(method = "lm", se = F) +
-  xlab("Vowel Space Hull (Bark)") +
-  ylab("Percent Words Correct") +
-  coord_cartesian(ylim = c(0,100)) +
-  theme_classic()
-
-OT_vsd25.incoord <- AcousticData %>%
-  ggplot() +
-  aes(x = Hull_bVSD_25,
-      y = transAcc,
-      color = Incoord) +
-  geom_point() +
-  geom_smooth(method = "lm", se = F) +
-  xlab("Vowel Space Density 25 (Bark)") +
-  ylab("Percent Words Correct") +
-  coord_cartesian(ylim = c(0,100)) +
-  theme_classic()
-
-OT_vsd75.incoord <- AcousticData %>%
-  ggplot() +
-  aes(x = Hull_bVSD_75,
-      y = transAcc,
-      color = Incoord) +
-  geom_point() +
-  geom_smooth(method = "lm", se = F) +
-  xlab("Vowel Space Density 75 (Bark)") +
-  ylab("Percent Words Correct") +
-  coord_cartesian(ylim = c(0,100)) +
-  theme_classic()
-
-
-# VAS Scatterplots
-
-VAS_VSA.incoord <- AcousticData %>%
-  ggplot() +
-  aes(x = VSA_b,
-      y = VAS,
-      color = Incoord) +
-  geom_point() +
-  geom_smooth(method = "lm", se = F) +
-  xlab("Vowel Space Area (Bark)") +
-  ylab("VAS Score") +
-  ggtitle("Visual Analog Scale") +
-  coord_cartesian(ylim = c(0,100)) +
-  theme_classic() +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
-
-VAS_disp.incoord <- AcousticData %>%
-  ggplot() +
-  aes(x = vowel_ED_b,
-      y = VAS,
-      color = Incoord) +
-  geom_point() +
-  geom_smooth(method = "lm", se = F) +
-  xlab("Corner Dispersion (Bark)") +
-  ylab("VAS Score") +
-  coord_cartesian(ylim = c(0,100)) +
-  theme_classic()
-
-VAS_Hull.incoord <- AcousticData %>%
-  ggplot() +
-  aes(x = Hull_b,
-      y = VAS,
-      color = Incoord) +
-  geom_point() +
-  geom_smooth(method = "lm", se = F) +
-  xlab("Vowel Space Hull (Bark)") +
-  ylab("VAS Score") +
-  coord_cartesian(ylim = c(0,100)) +
-  theme_classic()
-
-VAS_vsd25.incoord <- AcousticData %>%
-  ggplot() +
-  aes(x = Hull_bVSD_25,
-      y = VAS,
-      color = Incoord) +
-  geom_point() +
-  geom_smooth(method = "lm", se = F) +
-  xlab("Vowel Space Density 25 (Bark)") +
-  ylab("VAS Score") +
-  coord_cartesian(ylim = c(0,100)) +
-  theme_classic()
-
-VAS_vsd75.incoord <- AcousticData %>%
-  ggplot() +
-  aes(x = Hull_bVSD_75,
-      y = VAS,
-      color = Incoord) +
-  geom_point() +
-  geom_smooth(method = "lm", se = F) +
-  xlab("Vowel Space Density 75 (Bark)") +
-  ylab("VAS Score") +
-  coord_cartesian(ylim = c(0,100)) +
-  theme_classic()
-
-
-# Creating Scatterplot Figure
-
-Scatterplots_incoord <- ggpubr::ggarrange(OT_VSA.incoord, VAS_VSA.incoord, OT_disp.incoord, VAS_disp.incoord, OT_Hull.incoord, VAS_Hull.incoord, OT_vsd25.incoord, VAS_vsd25.incoord, OT_vsd75.incoord, VAS_vsd75.incoord,
-                  ncol = 2,
-                  nrow = 5)
-
-## Saving Scatterplot Figure
-
-ggsave("Plots/Scatterplots_incoord.png", plot = last_plot(), width = 15, height = 20, unit = "in", scale = .5)
-
-
-```
-
 
 ## Group Comparisons - 4 Groups
-### Means and SD
-
-```{r}
-
-AcousticData %>%
-  dplyr::group_by(Sex, Etiology) %>%
-  dplyr::summarize(VSA_mean = mean(VSA_b, na.rm =T), VSA_sd = sd(VSA_b, na.rm = T),
-                   Disp_mean = mean(vowel_ED_b, na.rm =T), Disp_sd = sd(vowel_ED_b, na.rm =T),
-                   Hull_mean = mean(Hull_b, na.rm =T), Hull_sd = sd(Hull_b, na.rm =T),
-                   VSD25_mean = mean(Hull_bVSD_25, na.rm =T), VSD25_sd = sd(Hull_bVSD_25, na.rm =T),
-                   VSD50_mean = mean(Hull_bVSD_50, na.rm =T), VSD50_sd = sd(Hull_bVSD_50, na.rm =T),
-                   VSD75_mean = mean(Hull_bVSD_75, na.rm =T), VSD75_sd = sd(Hull_bVSD_75, na.rm =T),
-                   VAS_mean = mean(VAS, na.rm =T), VAS_sd = sd(VAS, na.rm =T),
-                   OT_mean = mean(transAcc, na.rm =T), OT_sd = sd(transAcc, na.rm =T))
-
-AcousticData %>%
-  dplyr::group_by(Sex) %>%
-  dplyr::summarize(VSA_mean = mean(VSA_b, na.rm =T), VSA_sd = sd(VSA_b, na.rm = T),
-                   Disp_mean = mean(vowel_ED_b, na.rm =T), Disp_sd = sd(vowel_ED_b, na.rm =T),
-                   Hull_mean = mean(Hull_b, na.rm =T), Hull_sd = sd(Hull_b, na.rm =T),
-                   VSD25_mean = mean(Hull_bVSD_25, na.rm =T), VSD25_sd = sd(Hull_bVSD_25, na.rm =T),
-                   VSD50_mean = mean(Hull_bVSD_50, na.rm =T), VSD50_sd = sd(Hull_bVSD_50, na.rm =T),
-                   VSD75_mean = mean(Hull_bVSD_75, na.rm =T), VSD75_sd = sd(Hull_bVSD_75, na.rm =T),
-                   VAS_mean = mean(VAS, na.rm =T), VAS_sd = sd(VAS, na.rm =T),
-                   OT_mean = mean(transAcc, na.rm =T), OT_sd = sd(transAcc, na.rm =T))
-
-AcousticData %>%
-  dplyr::group_by(Etiology) %>%
-  dplyr::summarize(VSA_mean = mean(VSA_b, na.rm =T), VSA_sd = sd(VSA_b, na.rm = T),
-                   Disp_mean = mean(vowel_ED_b, na.rm =T), Disp_sd = sd(vowel_ED_b, na.rm =T),
-                   Hull_mean = mean(Hull_b, na.rm =T), Hull_sd = sd(Hull_b, na.rm =T),
-                   VSD25_mean = mean(Hull_bVSD_25, na.rm =T), VSD25_sd = sd(Hull_bVSD_25, na.rm =T),
-                   VSD50_mean = mean(Hull_bVSD_50, na.rm =T), VSD50_sd = sd(Hull_bVSD_50, na.rm =T),
-                   VSD75_mean = mean(Hull_bVSD_75, na.rm =T), VSD75_sd = sd(Hull_bVSD_75, na.rm =T),
-                   VAS_mean = mean(VAS, na.rm =T), VAS_sd = sd(VAS, na.rm =T),
-                   OT_mean = mean(transAcc, na.rm =T), OT_sd = sd(transAcc, na.rm =T))
-
-
-```
-
-### Acoustic Measures
-VSA
+### VSA
 ```{r}
 
 ## Specify the Model
@@ -461,7 +163,7 @@ pairwise.wilcox.test(AcousticData$VSA_b, AcousticData$Etiology, p.adjust.method 
 
 ```
 
-Corner Dispersion
+### Corner Dispersion
 ```{r}
 
 ## Specify the Model
@@ -481,7 +183,7 @@ summary(disp_group)
 
 ```
 
-Hull
+### Hull
 ```{r}
 
 ## Specify the Model
@@ -501,7 +203,7 @@ summary(hull_group)
 
 ```
 
-VSD 25
+### VSD 25
 ```{r}
 
 ## Specify the Model
@@ -522,32 +224,7 @@ summary(vsd25_group)
 
 ```
 
-
-VSD 50
-```{r}
-
-## Specify the Model
-vsd50_group <- aov(Hull_bVSD_50 ~ Etiology, data = AcousticData)
-
-## Assumption Check
-
-plot(vsd50_group, 1)
-plot(vsd50_group, 2)
-car::leveneTest(vsd50_group)
-vsd50_residuals <- residuals(object = vsd50_group)
-shapiro.test(vsd50_residuals)
-
-## Model Results
-
-summary(vsd50_group)
-
-## Kruskal Wallis Test
-
-kruskal.test(Hull_bVSD_50 ~ Etiology, data = AcousticData)
-
-```
-
-VSD 75
+### VSD 75
 ```{r}
 
 ## Specify the Model
@@ -572,200 +249,147 @@ kruskal.test(Hull_bVSD_75 ~ Etiology, data = AcousticData)
 ```
 
 ## Group Comparisons - 2 Groups
-### Two Dataframes for Incoord Groups
-
+This is the analysis for the two metagroups, Group A and B.
 ```{r}
 
-coord.group <- AcousticData %>%
-  dplyr::filter(Incoord == 0)
+groupA <- AcousticData %>%
+  dplyr::filter(metaGroup == "A")
 
-incoord.group <- AcousticData %>%
-  dplyr::filter(Incoord == 1)
+groupB <- AcousticData %>%
+  dplyr::filter(metaGroup == "B")
 
 ```
 
 
 ### VSA
-
 ```{r}
 
 # Assumption Check
 
 ## Checking Normality
-
-with(AcousticData, shapiro.test(VSA_b[Incoord == 0]))
-with(AcousticData, shapiro.test(VSA_b[Incoord == 1]))
+with(AcousticData, shapiro.test(VSA_b[metaGroup == "A"]))
+with(AcousticData, shapiro.test(VSA_b[metaGroup == "B"]))
 
 ## Equal Variance Check
-
-res.ftest.VSA <- var.test(VSA_b ~ Incoord, data = AcousticData)
+res.ftest.VSA <- var.test(VSA_b ~ metaGroup, data = AcousticData)
 res.ftest.VSA
 
 # Model Results
-
-VSA_b_t <- t.test(incoord.group$VSA_b, coord.group$VSA_b, var.equal = T)
+VSA_b_t <- t.test(groupA$VSA_b, groupB$VSA_b, var.equal = T)
 VSA_b_t
 
 ```
 
 ### Corner Dispersion
-
 ```{r}
 
 # Assumption Check
 
 ## Checking Normality
-
-with(AcousticData, shapiro.test(vowel_ED_b[Incoord == 0]))
-with(AcousticData, shapiro.test(vowel_ED_b[Incoord == 1]))
+with(AcousticData, shapiro.test(vowel_ED_b[metaGroup == "A"]))
+with(AcousticData, shapiro.test(vowel_ED_b[metaGroup == "B"]))
 
 ## Equal Variance Check
-
-res.ftest.disp <- var.test(vowel_ED_b ~ Incoord, data = AcousticData)
+res.ftest.disp <- var.test(vowel_ED_b ~ metaGroup, data = AcousticData)
 res.ftest.disp
 
 # Model Results
-
-disp_t <- t.test(incoord.group$vowel_ED_b, coord.group$vowel_ED_b, var.equal = T)
+disp_t <- t.test(groupA$vowel_ED_b, groupB$vowel_ED_b, var.equal = T)
 disp_t
 
 ```
 
 ### Hull
-
 ```{r}
 
 # Assumption Check
 
 ## Checking Normality
-
-with(AcousticData, shapiro.test(Hull_b[Incoord == 0]))
-with(AcousticData, shapiro.test(Hull_b[Incoord == 1]))
+with(AcousticData, shapiro.test(Hull_b[metaGroup == "A"]))
+with(AcousticData, shapiro.test(Hull_b[metaGroup == "B"]))
 
 ## Equal Variance Check
-
-res.ftest.hull <- var.test(Hull_b ~ Incoord, data = AcousticData)
+res.ftest.hull <- var.test(Hull_b ~ metaGroup, data = AcousticData)
 res.ftest.hull
 
 # Model Results
-
-hull_t <- t.test(incoord.group$Hull_b, coord.group$Hull_b, var.equal = T)
+hull_t <- t.test(groupA$Hull_b, groupB$Hull_b, var.equal = T)
 hull_t
 
 ```
 
 ### VSD 25
-
 ```{r}
 
 # Assumption Check
 
 ## Checking Normality
-
-with(AcousticData, shapiro.test(Hull_bVSD_25[Incoord == 0]))
-with(AcousticData, shapiro.test(Hull_bVSD_25[Incoord == 1]))
+with(AcousticData, shapiro.test(Hull_bVSD_25[metaGroup == "A"]))
+with(AcousticData, shapiro.test(Hull_bVSD_25[metaGroup == "B"]))
 
 ## Equal Variance Check
-
-res.ftest.vsd25 <- var.test(Hull_bVSD_25 ~ Incoord, data = AcousticData)
+res.ftest.vsd25 <- var.test(Hull_bVSD_25 ~ metaGroup, data = AcousticData)
 res.ftest.vsd25
 
 # Model Results
-
-vsd25_t <- t.test(incoord.group$Hull_bVSD_25, coord.group$Hull_bVSD_25, var.equal = T)
+vsd25_t <- t.test(groupA$Hull_bVSD_25, groupB$Hull_bVSD_25, var.equal = T)
 vsd25_t
 
 ```
 
-### VSD 50
-
-```{r}
-
-# Assumption Check
-
-## Checking Normality
-
-with(AcousticData, shapiro.test(Hull_bVSD_50[Incoord == 0]))
-with(AcousticData, shapiro.test(Hull_bVSD_50[Incoord == 1]))
-
-## Equal Variance Check
-
-res.ftest.vsd50 <- var.test(Hull_bVSD_50 ~ Incoord, data = AcousticData)
-res.ftest.vsd50
-
-# Model Results (Mann-Whitney U test conducted since assumption of normality is violated)
-
-vsd50_MW <- wilcox.test(Hull_bVSD_50 ~ Incoord, data = AcousticData)
-vsd50_MW
-
-```
-
 ### VSD 75
-
 ```{r}
 
 # Assumption Check
 
 ## Checking Normality
-
-with(AcousticData, shapiro.test(Hull_bVSD_75[Incoord == 0]))
-with(AcousticData, shapiro.test(Hull_bVSD_75[Incoord == 1]))
+with(AcousticData, shapiro.test(Hull_bVSD_75[metaGroup == "A"]))
+with(AcousticData, shapiro.test(Hull_bVSD_75[metaGroup == "B"]))
 
 ## Equal Variance Check
-
-res.ftest.vsd75 <- var.test(Hull_bVSD_75 ~ Incoord, data = AcousticData)
+res.ftest.vsd75 <- var.test(Hull_bVSD_75 ~ metaGroup, data = AcousticData)
 res.ftest.vsd75
 
 # Model Results (Mann-Whitney U test conducted since assumption of normality is violated)
-
-vsd75_MW <- wilcox.test(Hull_bVSD_75 ~ Incoord, data = AcousticData)
+vsd75_MW <- wilcox.test(Hull_bVSD_75 ~ metaGroup, data = AcousticData)
 vsd75_MW
-
 
 ```
 
-### Orthographic Transcription Scores
-
+### Intelligibility (OT)
 ```{r}
 
 # Assumption Check
 
 ## Checking Normality
-
-with(AcousticData, shapiro.test(transAcc[Incoord == 0]))
-with(AcousticData, shapiro.test(transAcc[Incoord == 1]))
+with(AcousticData, shapiro.test(transAcc[metaGroup == "A"]))
+with(AcousticData, shapiro.test(transAcc[metaGroup == "B"]))
 
 ## Equal Variance Check
-
-res.ftest.OT <- var.test(transAcc ~ Incoord, data = AcousticData)
+res.ftest.OT <- var.test(transAcc ~ metaGroup, data = AcousticData)
 res.ftest.OT
 
 # Model Results (Mann-Whitney U test conducted since assumption of normality is violated)
-
-OT_MW <- wilcox.test(transAcc ~ Incoord, data = AcousticData)
+OT_MW <- wilcox.test(transAcc ~ metaGroup, data = AcousticData)
 OT_MW
 
 ```
 
-### VAS
-
+### Intelligibility (VAS)
 ```{r}
 
 # Assumption Check
 
 ## Checking Normality
-
-with(AcousticData, shapiro.test(VAS[Incoord == 0]))
-with(AcousticData, shapiro.test(VAS[Incoord == 1]))
+with(AcousticData, shapiro.test(VAS[metaGroup == "A"]))
+with(AcousticData, shapiro.test(VAS[metaGroup == "B"]))
 
 ## Equal Variance Check
-
-res.ftest.VAS <- var.test(VAS ~ Incoord, data = AcousticData)
+res.ftest.VAS <- var.test(VAS ~ metaGroup, data = AcousticData)
 res.ftest.VAS
 
 # Model Results (Mann-Whitney U test conducted since assumption of normality is violated)
-
-OT_MW <- wilcox.test(VAS ~ Incoord, data = AcousticData)
+OT_MW <- wilcox.test(VAS ~ metaGroup, data = AcousticData)
 OT_MW
 
 ```
@@ -775,137 +399,120 @@ OT_MW
 Since we found significant group differences for some acoustic measures between the ALS/PD and Ataxic/HD groups, we continued the heirarichal regression approach from OT Model 5. Adding in the Incoord predictor along with the interactions between the acoustic measures did not significantly improve model fit. So our original final OT model is retained.
 
 ### Model 6
-
 ```{r}
 
 ## Specifying Model 6
-
-OT_Model6 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b + Incoord, data = AcousticData)
+OT_Model6 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b + metaGroup, data = AcousticData)
 
 ## Model 6 Assumption Check
-
 performance::check_model(OT_Model6)
 
 ## Model 6 Summary
-
 summary(OT_Model6)
 
 ## Model 5 and Model 6 Comparison
-
 anova(OT_Model5, OT_Model6)
 
 ```
 ### Model 7
-
 ```{r}
 
 ## Specifying Model 7
-
 OT_Model7 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b + 
-                  Incoord + Incoord*Hull_bVSD_25, data = AcousticData)
+                  metaGroup + metaGroup*Hull_bVSD_25, data = AcousticData)
 
 ## Model 7 Assumption Check
-
 performance::check_model(OT_Model7)
 
 ## Model 7 Summary
-
 summary(OT_Model7)
 
 ## Model 6 and Model 7 Comparison
-
 anova(OT_Model6, OT_Model7)
 
 ```
 
 ### Model 8
-
 ```{r}
 
 ## Specifying Model 8
-
 OT_Model8 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b + 
-                  Incoord + Incoord*Hull_bVSD_25 + Incoord*Hull_bVSD_75, data = AcousticData)
+                  metaGroup + metaGroup*Hull_bVSD_25 + metaGroup*Hull_bVSD_75, data = AcousticData)
 
 ## Model 8 Assumption Check
-
 performance::check_model(OT_Model8)
 
 ## Model 8 Summary
-
 summary(OT_Model8)
 
 ## Model 7 and Model 8 Comparison
-
 anova(OT_Model7, OT_Model8)
 
 ```
 
 ### Model 9
-
 ```{r}
 
 ## Specifying Model 9
-
-OT_Model9 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b + 
-                  Incoord + Incoord*Hull_bVSD_25 + Incoord*Hull_bVSD_75 + Incoord*Hull_b, data = AcousticData)
+OT_Model9 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b + metaGroup +
+                  metaGroup*Hull_bVSD_25 +
+                  metaGroup*Hull_bVSD_75 +
+                  metaGroup*Hull_b, data = AcousticData)
 
 ## Model 9 Assumption Check
-
 performance::check_model(OT_Model9)
 
 ## Model 9 Summary
-
 summary(OT_Model9)
 
 ## Model 8 and Model 9 Comparison
-
 anova(OT_Model8, OT_Model9)
 
 ```
 
 ### Model 10
-
 ```{r}
 
 ## Specifying Model 10
-
-OT_Model10 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b + 
-                  Incoord + Incoord*Hull_bVSD_25 + Incoord*Hull_bVSD_75 + Incoord*Hull_b + Incoord*VSA_b, data = AcousticData)
+OT_Model10 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b +
+                   metaGroup +
+                   metaGroup*Hull_bVSD_25 +
+                   metaGroup*Hull_bVSD_75 +
+                   metaGroup*Hull_b +
+                   metaGroup*VSA_b,
+                 data = AcousticData)
 
 ## Model 10 Assumption Check
-
 performance::check_model(OT_Model10)
 
 ## Model 10 Summary
-
 summary(OT_Model10)
 
 ## Model 9 and Model 10 Comparison
-
 anova(OT_Model9, OT_Model10)
 
 ```
 
 ### Model 11
-
 ```{r}
 
 ## Specifying Model 11
-
-OT_Model11 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b + 
-                  Incoord + Incoord*Hull_bVSD_25 + Incoord*Hull_bVSD_75 + Incoord*Hull_b + Incoord*VSA_b + Incoord*vowel_ED_b, data = AcousticData)
+OT_Model11 <- lm(transAcc ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b +
+                   metaGroup +
+                   metaGroup*Hull_bVSD_25 +
+                   metaGroup*Hull_bVSD_75 +
+                   metaGroup*Hull_b +
+                   metaGroup*VSA_b +
+                   metaGroup*vowel_ED_b,
+                 data = AcousticData)
 
 ## Model 11 Assumption Check
-
 performance::check_model(OT_Model11)
 
 ## Model 11 Summary
-
 summary(OT_Model11)
 
 ## Model 10 and Model 11 Comparison
-
 anova(OT_Model10, OT_Model11)
 
 ```
@@ -915,190 +522,165 @@ anova(OT_Model10, OT_Model11)
 Since we found significant group differences for some acoustic measures between the ALS/PD and Ataxic/HD groups, we continued the hierarchical regression approach from VAS Model 5. VAS Model 6 fit significantly better than VAS Model 5. However, adding in the interactions between Incoord and the acoustic measures did not significantly improve model fit.
 
 ### Model 6
-
 ```{r}
 
 ## Specifying Model 6
-
-VAS_Model6 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b + Incoord, data = AcousticData)
+VAS_Model6 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b +
+                   metaGroup, data = AcousticData)
 
 ## Model 6 Assumption Check
-
 performance::check_model(VAS_Model6)
 
 ## Model 6 Summary
-
 summary(VAS_Model6)
 
 ## Model 5 and Model 6 Comparison
-
 anova(VAS_Model5, VAS_Model6)
-
 
 ```
 
 ### Model 7
-
 ```{r}
 
 ## Specifying Model 7
-
 VAS_Model7 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b + 
-                  Incoord + Incoord*Hull_bVSD_25, data = AcousticData)
+                  metaGroup + metaGroup*Hull_bVSD_25, data = AcousticData)
 
 ## Model 7 Assumption Check
-
 performance::check_model(VAS_Model7)
 
 ## Model 7 Summary
-
 summary(VAS_Model7)
 
 ## Model 6 and Model 7 Comparison
-
 anova(VAS_Model6, VAS_Model7)
 
 
 ```
 
 ### Model 8
-
 ```{r}
 
 ## Specifying Model 8
-
 VAS_Model8 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b + 
-                  Incoord + Incoord*Hull_bVSD_25 + Incoord*Hull_bVSD_75, data = AcousticData)
+                  metaGroup + metaGroup*Hull_bVSD_25 + metaGroup*Hull_bVSD_75, data = AcousticData)
 
 ## Model 8 Assumption Check
-
 performance::check_model(VAS_Model8)
 
 ## Model 8 Summary
-
 summary(VAS_Model8)
 
 ## Model 7 and Model 8 Comparison
-
 anova(VAS_Model7, VAS_Model8)
 
 
 ```
 
 ### Model 9
-
 ```{r}
 
 ## Specifying Model 9
-
-VAS_Model9 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b + 
-                  Incoord + Incoord*Hull_bVSD_25 + Incoord*Hull_bVSD_75 + Incoord*Hull_b, data = AcousticData)
+VAS_Model9 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b +
+                   metaGroup +
+                   metaGroup*Hull_bVSD_25 +
+                   metaGroup*Hull_bVSD_75 +
+                   metaGroup*Hull_b,
+                 data = AcousticData)
 
 ## Model 9 Assumption Check
-
 performance::check_model(VAS_Model9)
 
 ## Model 9 Summary
-
 summary(VAS_Model9)
 
 ## Model 8 and Model 9 Comparison
-
 anova(VAS_Model8, VAS_Model9)
 
 ```
 
 ### Model 10
-
 ```{r}
 
 ## Specifying Model 10
-
-VAS_Model10 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b + 
-                  Incoord + Incoord*Hull_bVSD_25 + Incoord*Hull_bVSD_75 + Incoord*Hull_b + Incoord*VSA_b, data = AcousticData)
+VAS_Model10 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b +
+                    metaGroup +
+                    metaGroup*Hull_bVSD_25 +
+                    metaGroup*Hull_bVSD_75 +
+                    metaGroup*Hull_b +
+                    metaGroup*VSA_b,
+                  data = AcousticData)
 
 ## Model 10 Assumption Check
-
 performance::check_model(VAS_Model10)
 
 ## Model 10 Summary
-
 summary(VAS_Model10)
 
 ## Model 9 and Model 10 Comparison
-
 anova(VAS_Model9, VAS_Model10)
 
 ```
 ### Model 11
-
 ```{r}
 
 ## Specifying Model 11
-
-VAS_Model11 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b + 
-                  Incoord + Incoord*Hull_bVSD_25 + Incoord*Hull_bVSD_75 + Incoord*Hull_b + Incoord*VSA_b + Incoord*vowel_ED_b, data = AcousticData)
+VAS_Model11 <- lm(VAS ~ Hull_bVSD_25 + Hull_bVSD_75 + Hull_b + VSA_b + vowel_ED_b +
+                    metaGroup +
+                    metaGroup*Hull_bVSD_25 +
+                    metaGroup*Hull_bVSD_75 +
+                    metaGroup*Hull_b +
+                    metaGroup*VSA_b +
+                    metaGroup*vowel_ED_b,
+                  data = AcousticData)
 
 ## Model 11 Assumption Check
-
 performance::check_model(VAS_Model11)
 
 ## Model 11 Summary
-
 summary(VAS_Model11)
 
 ## Model 10 and Model 11 Comparison
-
 anova(VAS_Model10, VAS_Model11)
 
 ```
 
 ### New Final VAS Model
-
-Since VAS Model 6 was significantly better fit than Model 5, we fit a new final parsimonious model for VAS to the data (VAS ~ VSA_b + Incoord) and compared that to the old final VAS model (VAS ~ VSA_b). The new final model was not a significantly better fit than the old final model. Thus the old final model (VAS ~ VSA_b) is retained.
+Since VAS Model 6 was significantly better fit than Model 5, we fit a new final parsimonious model for VAS to the data (VAS ~ VSA_b + metaGroup) and compared that to the old final VAS model (VAS ~ VSA_b). The new final model was not a significantly better fit than the old final model. Thus the old final model (VAS ~ VSA_b) is retained.
 
 ```{r}
 
 ## Specifying New Final VAS Model
-
-VAS_Model_newfinal <- lm(VAS ~ VSA_b + Incoord, data = AcousticData)
+VAS_Model_newfinal <- lm(VAS ~ VSA_b + metaGroup, data = AcousticData)
 
 ## New Final VAS Model Assumption Check
-
 performance::check_model(VAS_Model_newfinal)
 
 ## New Final VAS Model Summary
-
 summary(VAS_Model_newfinal)
 
 ## Comparison to Old Final Model
-
 anova(VAS_Model_final, VAS_Model_newfinal)
 
 ```
 
 ## Testing Individual Predictors
-
 Because some correlations between predictors are high. We run a series of simple linear regressions to test if the predictors significantly predict each intelligibility measure on their own (VSD 25 and VSA models were already complete in our initial model comparison approach)
 
 ### Orthographic Transcription Models
-
 ```{r}
 
 # OT ~ VSD 75
-
 OT_vsd75_model <- lm(transAcc ~ Hull_bVSD_75, data = AcousticData)
 performance::check_model(OT_vsd75_model)
 summary(OT_vsd75_model)
 
 # OT ~ Hull
-
 OT_hull_model <- lm(transAcc ~ Hull_b, data = AcousticData)
 performance::check_model(OT_hull_model)
 summary(OT_hull_model)
 
 # OT ~ Corner Dispersion
-
 OT_disp_model <- lm(transAcc ~ vowel_ED_b, data = AcousticData)
 performance::check_model(OT_disp_model)
 summary(OT_disp_model)
@@ -1106,57 +688,22 @@ summary(OT_disp_model)
 ```
 
 ### VAS Models
-
 ```{r}
 
 # VAS ~ VSD 75
-
 VAS_vsd75_model <- lm(VAS ~ Hull_bVSD_75, data = AcousticData)
 performance::check_model(VAS_vsd75_model)
 summary(VAS_vsd75_model)
 
 # VAS ~ Hull
-
 VAS_hull_model <- lm(VAS ~ Hull_b, data = AcousticData)
 performance::check_model(VAS_hull_model)
 summary(VAS_hull_model)
 
 # VAS ~ Corner Dispersion
-
 VAS_disp_model <- lm(VAS ~ vowel_ED_b, data = AcousticData)
 performance::check_model(VAS_disp_model)
 summary(VAS_disp_model)
 
-
-```
-# Listener Demographic Information
-
-```{r}
-
-ListenerDemo <- Listeners %>%
-  furniture::table1(age, gender, race, ethnicity)
-
-ListenerDemo
-
-```
-
-# Speaker Demographics
-
-```{r}
-
-SpeakerDemo <- AcousticData %>%
-  dplyr::select(c(Speaker, Sex, Etiology))
-
-Ages <- rio::import("Prepped Data/Speaker Ages.xlsx")
-
-SpeakerDemo <- full_join(SpeakerDemo, Ages, by = "Speaker")
-
-SpeakerDemoInfo <- SpeakerDemo %>%
-  furniture::table1(Sex, Etiology, Age, na.rm = F)
-
-SpeakerDemoInfo
-
-SpeakerDemo %>%
-  dplyr::summarize(mean_age = mean(Age, na.rm = T), age_sd = sd(Age, na.rm = T), age_range = range(Age, na.rm = T))
 
 ```
